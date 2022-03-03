@@ -12,13 +12,17 @@ def get_version_datasets(version: str) -> List[str]:
     arcpy.AddMessage("1. Getting version ...")
     walk_gvds = arcpy.da.Walk(topdown=True, datatype="FeatureDataset")
     feature_datasets = []
+    feature_datasets_crs = []
     for dirpath, dirnames, fnames in walk_gvds:
         for gvds in dirnames:
             feature_datasets.append(gvds)
+            gvds_crs = arcpy.Describe(os.path.join(dirpath, gvds)).spatialReference.GCSCode
+            feature_datasets_crs.append(gvds_crs)
     
-    arcpy.AddMessage(F"1.1 Version_Datasets: {len(feature_datasets)}")
-    
-    return feature_datasets
+    combined_list = list(zip(feature_datasets, feature_datasets_crs))
+    arcpy.AddMessage(F"1.1 Version_Datasets: {len(combined_list)}")
+
+    return combined_list
 
 def get_version_feature_classes(version: str) -> List[str]:
     """
@@ -48,7 +52,7 @@ def get_version_tables(version: str) -> List[str]:
     
     return tables
 
-def extract_files(file_path, extract_path):
+def extract_files(file_path: str, extract_path: str):
     """
     Extract all files from a zip file
     """
@@ -67,13 +71,14 @@ def extract_files(file_path, extract_path):
                 arcpy.AddMessage(F"2.1 File name: {file.split('.')[0]}")
                 arcpy.AddMessage(F"2.2 File format: {file.split('.')[1]}")
                 arcpy.AddMessage(F"2.3 File date: {file_date}")
-            conversion_format()
+            conversion_format(F"{extract_path}\{file}")
         else:
             arcpy.AddMessage(F"2.1 File name: {file_name}")
             arcpy.AddMessage(F"2.2 File format: {file_format}")
             arcpy.AddMessage(F"2.3 File date: {file_date}")
+            set_workspace(F"{extract_path}\{file_name}.gdb")
 
-def conversion_format():
+def conversion_format(path: str):
     """
     Convert all files to a geodatabase
     """
@@ -81,6 +86,13 @@ def conversion_format():
     arcpy.AddMessage("2.5 Converting feature datasets...")
     arcpy.AddMessage("2.6 Converting feature classes...")
     arcpy.AddMessage("2.7 Converting tables...")
+
+def set_workspace(path: str):
+    """
+    Set workspace
+    """
+    arcpy.AddMessage("3. Setting workspace...")
+    arcpy.env.workspace = path
 
 def get_feature_datasets():
     """
@@ -152,19 +164,24 @@ if __name__ == '__main__':
     version_tables = get_version_tables(path)
     
     # Get input GDB / GPKG    
-    # file_path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data\0-178_202200301.gdb.zip"
-    file_path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data\0-179_202200301.zip"
+    file_path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data\0-178_202200301.gdb.zip"
+    # file_path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data\0-179_202200301.zip"
     extract_path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data"
-
-    # Set the workspace
-    """
-    in_workspace = os.path.dirname(file_path)
-    arcpy.AddMessage("Set the workspace...")
-    db_name = (in_workspace.split("\\")[-1]).split(".")[0]
-    arcpy.env.workspace = in_workspace
-    """
 
     # Extract files
     extract_files(file_path, extract_path)
 
+    # Validate 1
+    #fds = get_feature_datasets()
+
+    # Validate 2
+    #fds = get_feature_datasets()
+
+    # Validate 3
+    #fds = get_feature_datasets()
+
+    # Validate 4
+    #fds = get_feature_datasets()
+
+    # Validate 5
     #fds = get_feature_datasets()
