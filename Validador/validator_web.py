@@ -12,18 +12,15 @@ def get_version_datasets(version: str) -> List[str]:
     """
     arcpy.AddMessage("1. Getting version ...")
     walk_gvds = arcpy.da.Walk(topdown=True, datatype="FeatureDataset")
-    feature_datasets = []
-    feature_datasets_crs = []
+    feature_datasets_dict = dict()
     for dirpath, dirnames, fnames in walk_gvds:
         for gvds in dirnames:
-            feature_datasets.append(gvds)
-            gvds_crs = arcpy.Describe(os.path.join(dirpath, gvds)).spatialReference.GCSCode
-            feature_datasets_crs.append(gvds_crs)
-    
-    combined_list = list(zip(feature_datasets, feature_datasets_crs))
-    arcpy.AddMessage(F"1.1 Version_Datasets: {len(combined_list)}")
+            gvds_crs = arcpy.Describe(os.path.join(dirpath, gvds)).spatialReference
+            feature_datasets_dict[gvds] = [gvds_crs.GCSCode, gvds_crs.GCSName]
 
-    return combined_list
+    arcpy.AddMessage(F"1.1 Version_Datasets: {len(feature_datasets_dict)}")
+
+    return feature_datasets_dict
 
 def get_version_feature_classes(version: str) -> List[str]:
     """
@@ -81,8 +78,9 @@ def extract_files(file_path: str, extract_path: str):
 
 def conversion_format(path: str):
     """
-    Convert all files to a geodatabase
+    Convert all files to geodatabase
     """
+    # TODO - Add conversion to geodatabase
     arcpy.AddMessage("2.4 Converting files to geodatabase...")
     arcpy.AddMessage("2.5 Converting feature datasets...")
     arcpy.AddMessage("2.6 Converting feature classes...")
@@ -101,8 +99,9 @@ def spatial_matching():
     Spatial matching
     """
     arcpy.AddMessage("4. Spatial matching...")
+    arcpy.AddMessage("Verificación coincidencia espacial")
     
-    # TODO: request WFS
+    # TODO - Add request WFS
     geojson_servicioANM_1 = {
         "displayFieldName": "",
         "fieldAliases": {
@@ -276,73 +275,135 @@ def spatial_matching():
         ]
     }
 
+    # IDO-08061
+
     mining_title = arcpy.AsShape(geojson_servicioANM_1, True)
     delimit_proyect_pg = arcpy.MakeFeatureLayer_management(os.path.join(arcpy.env.workspace, "TOPOGRAFIA_LOCAL", "DELIMIT_PROYEC_PG"))
     select_location = arcpy.SelectLayerByLocation_management(delimit_proyect_pg, "ARE_IDENTICAL_TO", mining_title, None, "NEW_SELECTION", "NOT_INVERT")
 
     if int(arcpy.GetCount_management(select_location)[0]) > 0:
-        arcpy.AddMessage("Existe una zona de explotacion en el proyecto")
+        arcpy.AddMessage("La delimitación del título minero coincide con el polígono estructurado en AnnA Minería. -> DELIMIT_PROYEC_PG")
         return True
     else:
-        arcpy.AddMessage("No existe una zona de explotacion en el proyecto")
+        arcpy.AddError("Error, La delimitación del título minero no coincide con el polígono estructurado en AnnA Minería. -> DELIMIT_PROYEC_PG")
         return False
-
 
 def get_feature_datasets():
     """
     Get all feature datasets in a geodatabase
     """
-    arcpy.AddMessage("Getting feature datasets...")
-    walk_fds = arcpy.da.Walk(topdown=True, datatype="FeatureDataset")
-    feature_datasets = []
-    for dirpath, dirnames, fnames in walk_fds:
-        for fd in dirnames:
-            feature_datasets.append(fd)
-            fds_crs = arcpy.Describe(os.path.join(dirpath, fd)).spatialReference.GCSCode
-    
-    arcpy.AddMessage(F"Feature_DataSets: {len(feature_datasets)}")
-    arcpy.AddMessage(feature_datasets)
-    
-    get_feature_classes()
-    
-    return feature_datasets
-
+    walk_gds = arcpy.da.Walk(topdown=True, datatype="FeatureDataset")
+    feature_datasets_dict = dict()
+    for dirpath, dirnames, fnames in walk_gds:
+        for gds in dirnames:
+            gds_crs = arcpy.Describe(os.path.join(dirpath, gds)).spatialReference.GCSCode
+            feature_datasets_dict[gds] = gds_crs
+    return feature_datasets_dict
 
 def get_feature_classes():
     """
-    Get all feature classes in a feature dataset
+    Get all feature classes
     """
-    arcpy.AddMessage("Getting feature classes...")
     walk_fcs = arcpy.da.Walk(topdown=True, datatype="FeatureClass")
     feature_classes = []
     for dirpath, dirnames, fnames in walk_fcs:
         for fc in fnames:
             feature_classes.append(fc)
-            fc_crs = arcpy.Describe(os.path.join(dirpath, fc)).spatialReference.GCSCode
     
-    arcpy.AddMessage(F"Feature_Classes: {len(feature_classes)}")
-    arcpy.AddMessage(feature_classes)
-
-    get_tables()
-
     return feature_classes
-
 
 def get_tables():
     """
-    Get all tables in a geodatabase
+    Get all tables
     """
-    arcpy.AddMessage("Getting tables...")
     walk_tables = arcpy.da.Walk(topdown=True, datatype="Table")
     tables = []
     for dirpath, dirnames, fnames in walk_tables:
-        for table in fnames:
-            tables.append(table)
-    
-    arcpy.AddMessage(F"Tables: {len(tables)}")
-    arcpy.AddMessage(tables)
+        for fc in fnames:
+            tables.append(fc)
     
     return tables
+    
+def reference_system(gvds, gds):
+    """
+    Reference Sysetm
+    """
+    arcpy.AddMessage("5. Reference system...")
+    arcpy.AddMessage("Verificación sistema de referencia")
+    count_errors= 0
+    for key_gds, value_gds in gds.items():
+        if key_gds in gvds:
+            if value_gds == gvds[key_gds][0]:
+                arcpy.AddMessage(F"Sistema de referencia correcto {gvds[key_gds][1]} (EPSG: {gvds[key_gds][0]}) -> {key_gds}")
+            else:
+                count_errors+= 1
+                arcpy.AddError(F"Sistema de referencia, el sistema correcto debe ser {gvds[key_gds][1]} (EPSG: {gvds[key_gds][0]}) -> {key_gds}")
+    arcpy.AddMessage(F"Errores encontrados: {count_errors}")
+
+
+def quantity_dataset(gvds, gds):
+    """
+    Quantity of datasets
+    """
+    arcpy.AddMessage("6. Quantity of datasets...")
+    arcpy.AddMessage("Verificación dataset")
+    count_errors= 0
+    for key_gvds in gvds.items():
+        if key_gvds[0] in gds:
+            arcpy.AddMessage(F"Dataset correcto -> {key_gvds[0]}")
+        else:
+            count_errors+= 1
+            arcpy.AddError(F"Dataset del MDG faltante -> {key_gvds[0]}")
+    for key_gds, value_gds in gds.items():
+        if not key_gds in gvds:
+            count_errors+= 1
+            arcpy.AddError(F"Dataset no incluido en el MDG -> {key_gds}")
+
+    arcpy.AddMessage(F"Errores encontrados: {count_errors}")
+
+def quantity_feature_class(gvfc, gfc):
+    """
+    Quantity of feature classes
+    """
+    arcpy.AddMessage("7. Quantity of feature classes...")
+    arcpy.AddMessage("Verificación feature class")
+    count_errors= 0
+
+    for vfc in gvfc:
+        if vfc in gfc:
+            arcpy.AddMessage(F"Feature class correcto -> {vfc}")
+        else:
+            count_errors+= 1
+            arcpy.AddError(F"Feature class del MDG faltante -> {vfc}")
+
+    for fc in gfc:
+        if not fc in gvfc:
+            count_errors+= 1
+            arcpy.AddError(F"Feature class no incluido en el MDG -> {fc}")
+
+    arcpy.AddMessage(F"Errores encontrados: {count_errors}")
+
+def quantity_tables(gvtbl, gtbl):
+    """
+    Quantity of tables
+    """
+    arcpy.AddMessage("8. Quantity of tables...")
+    arcpy.AddMessage("Verificación tablas")
+    count_errors= 0
+
+    for vtbl in gvtbl:
+        if vtbl in gtbl:
+            arcpy.AddMessage(F"Tabla o ficha correcta -> {vtbl}")
+        else:
+            count_errors+= 1
+            arcpy.AddError(F"Tabla o ficha del MDG faltante -> {vtbl}")
+
+    for tbl in gtbl:
+        if not tbl in gvtbl:
+            count_errors+= 1
+            arcpy.AddError(F"Tabla o ficha no incluido en el MDG -> {tbl}")
+
+    arcpy.AddMessage(F"Errores encontrados: {count_errors}")
 
 
 if __name__ == '__main__':
@@ -356,42 +417,51 @@ if __name__ == '__main__':
     # Feature Classes
     version_fc = get_version_feature_classes(path)
     # Tables
-    version_tables = get_version_tables(path)
+    version_tbl = get_version_tables(path)
     
-    # Get input GDB / GPKG    
+    # Get input GDB / GPKG
+
+    # Test - GDB Spatial Matching -> Expediente IDO-08061_20220303 -> False
+    # file_path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data\IDO-08061_20220303.gdb.zip"
+    # Test - GDB Spatial Matching -> Expediente IDO-08061_20220303 -> True
+    # file_path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data\IDO-08061_20220307.gdb.zip"
+    # Test - GDB Spatial Matching -> Expediente GBH-141_20220303 -> True
     # file_path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data\GBH-141_20220303.gdb.zip"
-    file_path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data\IDO-08061_20220303.gdb.zip"
+
+    # Test - GDB Spatial Matching - System Reference -> Expediente IDO-08061_20220303 -> False
+    file_path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data\IDO-08061_202203071.gdb.zip"
+    
+    # Test - GDB GPKG -> Expediente IDO-08062_20220303
     # file_path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data\IDO-08062_20220303.zip"
+    
     extract_path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data"
 
     # Extract files
     extract_files(file_path, extract_path)
+
+    # Get Datasets
+    ds = get_feature_datasets()
+
+    # Get Feature Classes
+    fc = get_feature_classes()
+
+    # Get Feature Classes
+    tbl = get_tables()
     
     # Validator 1 - Spatial Matching
     validate_1 = spatial_matching()
-    print(validate_1)
 
-    """
-    File code -> Form (Front-end) // 0-178 
-    
-    AsShape
-    file_code = "IDO-08061"
-    file_code = "GBH-141"
-    type_name = "Titulo_Vigente"
+    # Validator 2 - Reference System
+    validate_2 = reference_system(version_ds, ds)
 
-    """
+    # Validator 3 - Quantity of datasets
+    validate_3 = quantity_dataset(version_ds, ds)
 
-    
+    # Validator 4 - Quantity of feature classes
+    validate_4 = quantity_feature_class(version_fc, fc)
 
-    # compare_result = arcpy.management.FeatureCompare(delimit_proyect_pg, mining_title, "OBJECTID", "GEOMETRY_ONLY", None, "0.000000008983 DecimalDegrees", 0.00, 0.00, None, None, "NO_CONTINUE_COMPARE", None)
-    # print(compare_result[1])
+    # Validator 5 - Quantity of tables
+    validate_5 = quantity_tables(version_tbl, tbl)
 
-
-
-    # arcpy.MakeFeatureLayer_management(os.path.join(arcpy.env.workspace, "TOPOGRAFIA_LOCAL", "DELIMIT_PROYEC_PG"), "delimit_proyect_pg")
-
-    # arcpy.FeatureCompare_management(delimit_proyect_pg, mining_title, compare_type=)
-
-    # Validator 2 - Feature Comparison
-    
-    #fds = get_feature_datasets()
+    # Validator 6 - Required fields
+    # Validator 7 - Attributive characteristics
