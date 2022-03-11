@@ -6,7 +6,7 @@ from Validador.version_info import get_version_datasets, get_version_feature_cla
 from utils.utils import set_workspace
 from pathlib import Path
 from database.connection import con
-from database.gdb_path_to_validate import por_validar, gdb_para_validar, update_estado
+from database.gdb_path_to_validate import por_validar, gdb_para_validar, update_estado, borrar_registros_mensajes
 
 
 if __name__ == '__main__':
@@ -17,6 +17,7 @@ if __name__ == '__main__':
     id_bd_gdb, ruta_gdb = gdb_para_validar(con, gdb=path)
     
     update_estado(con, id=id_bd_gdb)
+    borrar_registros_mensajes(con, id=id_bd_gdb)
 
     
     # Get version GDB
@@ -24,9 +25,9 @@ if __name__ == '__main__':
     # Feature Datasets
     version_ds = get_version_datasets(con)
     # Feature Classes
-    # version_fc = get_version_feature_classes()
+    version_fc = get_version_feature_classes(con)
     # Tables
-    # version_tbl = get_version_tables()
+    version_tbl = get_version_tables(con)
     
     # file_path = str(current_path.parent.absolute().joinpath(data_folder).joinpath(zip_file))
     
@@ -42,25 +43,25 @@ if __name__ == '__main__':
     ds = get_feature_datasets()
 
     # Get Feature Classes
-    # fc = get_feature_classes()
+    fc = get_feature_classes()
 
     # Get Feature Classes
-    #tbl = get_tables()
+    tbl = get_tables()
     
     # Validator 1 - Spatial Matching
     #validate_1 = spatial_matching()
 
     # Validator 2 - Reference System
-    #validate_2 = reference_system(version_ds, ds)
+    reference_system(con, id_bd_gdb, version_ds, ds)
 
     # Validator 3 - Quantity of datasets
-    validate_3 = quantity_dataset(con, id_bd_gdb, version_ds, ds)
+    quantity_dataset(con, id_bd_gdb, version_ds, ds)
 
     # Validator 4 - Quantity of feature classes
-    # validate_4 = quantity_feature_class(version_fc, fc)
+    quantity_feature_class(con, id_bd_gdb, version_fc, fc)
 
     # Validator 5 - Quantity of tables
-    # validate_5 = quantity_tables(version_tbl, tbl)
+    quantity_tables(con, id_bd_gdb, version_tbl, tbl)
 
     # Validator 6 - Required fields
     # Validator 7 - Attributive characteristics

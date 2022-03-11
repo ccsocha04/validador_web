@@ -20,13 +20,13 @@ def por_validar (connection) -> int:
         return row.rowcount
 
 
-def gdb_para_validar(connection, gdb) -> Tuple[str, str]:
+def gdb_para_validar(connection, gdb: str) -> Tuple[str, str]:
     """
     Devuelve el path de la ubicación de la gdb.
 
     Args:
-        conecction: conexión a la base de datos.
-        gdb: path de la base de datos.
+        conecction : conexión a la base de datos.
+        gdb str: path de la base de datos.
     Returns:
         id, path: Tuple[str, str] tupla de la base de datos
 
@@ -36,8 +36,7 @@ def gdb_para_validar(connection, gdb) -> Tuple[str, str]:
     """
     sql = """
         SELECT ID, RUTA FROM MJEREZ.VALW_GDBS_VALIDAR  gdb_val
-        INNER JOIN MJEREZ.VALW_ESTADO_PROCESO vep ON gdb_val.ESTADO_ID =vep.ID_ESTADO_PROCESO 
-        WHERE vep.ESTADO ='Sin iniciar' AND RUTA = :ruta
+        WHERE RUTA = :ruta
         """
     # TODO en caso de que no se actualice hay un TypeError.
     with connection.cursor() as cur:
@@ -54,3 +53,13 @@ def update_estado(connection, id) -> None:
     """
     with connection.cursor() as cur:
         cur.execute(sql, id_bd=id)
+
+
+def borrar_registros_mensajes(connection, id) -> None:
+    """
+    En caso de que la gdb ya haya sido valida borra los mensajes en la base de datos.
+    """
+    sql = """DELETE FROM MJEREZ.VALW_GDB_MENSAJE WHERE GDB_ID = :id_bd"""
+    with connection.cursor() as cur:
+        cur.execute(sql, id_bd=id)
+    

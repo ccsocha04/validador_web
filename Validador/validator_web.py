@@ -262,11 +262,12 @@ def get_tables():
     tables = []
     for dirpath, dirnames, fnames in walk_tables:
         for fc in fnames:
-            tables.append(fc)
+            if not fc.endswith('__ATTACH'):
+                tables.append(fc)
     
     return tables
     
-def reference_system(gvds: Dict[str, List[str]], gds: List[str]):
+def reference_system(connection, id, gvds: Dict[str, List[str]], gds: List[str]):
     """
     Reference System
 
@@ -274,64 +275,114 @@ def reference_system(gvds: Dict[str, List[str]], gds: List[str]):
         gvds Dict[str, List[str]]: Datasets de la versión
         gds Dict[str, List[str]]: Datasets de la gdb a ser comprobada
     """
+    id_validador = _id_validador(connection, validador='SISTEMA DE REFERENCIA')
+    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
     arcpy.AddMessage("5. Reference system...")
     arcpy.AddMessage("Verificación sistema de referencia")
     count_errors= 0
     for key_gds, value_gds in gds.items():
         if key_gds in gvds:
             if value_gds == gvds[key_gds][0]:
-                arcpy.AddMessage(F"Sistema de referencia correcto {gvds[key_gds][1]} (EPSG: {gvds[key_gds][0]}) -> {key_gds}")
+                mensaje = f'Sistema de referencia correcto {gvds[key_gds][1]} (EPSG: {gvds[key_gds][0]}) -> {key_gds}'
+                arcpy.AddMessage(mensaje)
             else:
                 count_errors+= 1
-                arcpy.AddError(F"Sistema de referencia, el sistema correcto debe ser {gvds[key_gds][1]} (EPSG: {gvds[key_gds][0]}) -> {key_gds}")
+                mensaje = f'Sistema de referencia, el sistema correcto debe ser {gvds[key_gds][1]} (EPSG: {gvds[key_gds][0]}) -> {key_gds}'
+            _insert_mensaje(connection=connection, sql=sql, id_gdb=id, mensaje=mensaje, id_validador=id_validador)    
     arcpy.AddMessage(F"Errores encontrados: {count_errors}")
 
-def quantity_dataset(connection, id, gvds, gds):
+
+def _insert_mensaje(connection, sql: str, id_gdb: int, mensaje: str, id_validador:int)->None:
+    # TODO esto debería arrojar excepciones.
+    with connection.cursor() as cur:
+        cur.execute(sql, [id_gdb, mensaje, id_validador])
+
+def _id_validador(connection, validador:str)->int:
     """
-    Quantity of datasets
+    Retorna el ID de la tabla VALW_DOM_VALIDADORES.
+    Args:
+        validador: str , Campo DESCRIPCIÓN de la tabla VALW_DOM_VALIDADORES
+
+    RETURNS:
+        int: el ID de la DESCRIPCIÓN.
+    """
+    with connection.cursor() as cur:
+        return cur.execute("""SELECT ID FROM MJEREZ.VALW_DOM_VALIDADORES 
+            WHERE DESCRIPCION = :validador""", validador=validador).fetchone()[0]
+        
+
+
+def quantity_dataset(connection, id, gvds, gds) -> None:
+    """
+    Persiste la información de las diferencias o exactitudes de la validación referente a datasets.
+
+    Args:
+        connection: Conexión a la base de datos.
+        id int: identificador de la gdba en la tabla VALW_GDBS_VALIDAR.
+        gvsd str: datasets de la versión.
+        gvds Dict[str, List[str]]: Datasets de la versión
+        gds Dict[str, List[str]]: Datasets de la gdb a ser comprobada.
+    Returns:
+        None
     """
     arcpy.AddMessage("6. Quantity of datasets...")
     arcpy.AddMessage("Verificación dataset")
     count_errors= 0
-    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL) VALUES (:id_db, :mensaje)"""
+    id_validador = _id_validador(connection, validador='DATASETS')
+    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
     for key_gvds in gvds.items():
         if key_gvds[0] in gds:
             mensaje = f'Dataset correcto -> {key_gvds[0]}'
             
-            with connection.cursor() as cur:
-                cur.execute(sql, [id, mensaje])
+            _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
             arcpy.AddMessage(mensaje)
         else:
             count_errors+= 1
             mensaje = f'Dataset del MDG faltante -> {key_gvds[0]}'
             with connection.cursor() as cur:
-                cur.execute(sql, [id, mensaje])
+                _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
             arcpy.AddError(mensaje)
 
-    for key_gds, value_gds in gds.items():
+    for key_gds, _ in gds.items():
         if not key_gds in gvds:
             count_errors+=1
             mensaje = f"Dataset no incluido en el MDG -> {key_gds}"
-            with connection.cursor() as cur:
-                cur.execute(sql, [id, mensaje])
+            _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
             arcpy.AddError(mensaje)
     
     arcpy.AddMessage(F"Errores encontrados: {count_errors}")
 
-def quantity_feature_class(gvfc, gfc):
+def quantity_feature_class(connection, id, gvfc, gfc) -> None:
     """
-    Quantity of feature classes
+    Persiste la información de las diferencias o exactitudes de la validación referente a feature classes.
+
+    Args:
+        connection: Conexión a la base de datos.
+        id int: identificador de la gdba en la tabla VALW_GDBS_VALIDAR.
+        gvsd str: datasets de la versión.
+        gvds Dict[str, List[str]]: Datasets de la versión
+        gds Dict[str, List[str]]: Datasets de la gdb a ser comprobada.
+    Returns:
+        None
     """
+    id_validador = _id_validador(connection=connection, validador='FEATURE CLASSES')
+    
+    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
     arcpy.AddMessage("7. Quantity of feature classes...")
     arcpy.AddMessage("Verificación feature class")
     count_errors= 0
 
     for vfc in gvfc:
         if vfc in gfc:
+            mensaje = f'Feature class correcto -> {vfc}'
             arcpy.AddMessage(F"Feature class correcto -> {vfc}")
+            _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
         else:
             count_errors+= 1
+            mensaje = f'Feature class del MDG faltante -> {vfc}'
             arcpy.AddError(F"Feature class del MDG faltante -> {vfc}")
+            _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
+
 
     for fc in gfc:
         if not fc in gvfc:
@@ -340,25 +391,42 @@ def quantity_feature_class(gvfc, gfc):
 
     arcpy.AddMessage(F"Errores encontrados: {count_errors}")
 
-def quantity_tables(gvtbl, gtbl):
+def quantity_tables(connection, id, gvtbl, gtbl) -> None:
     """
-    Quantity of tables
+    Persiste la información de las diferencias o exactitudes de la validación referente a tablas.
+
+    Args:
+        connection: Conexión a la base de datos.
+        id int: identificador de la gdba en la tabla VALW_GDBS_VALIDAR.
+        gvsd str: datasets de la versión.
+        gvds Dict[str, List[str]]: Datasets de la versión
+        gds Dict[str, List[str]]: Datasets de la gdb a ser comprobada.
+    Returns:
+        None
     """
     arcpy.AddMessage("8. Quantity of tables...")
     arcpy.AddMessage("Verificación tablas")
     count_errors= 0
-
+    id_validador = _id_validador(connection=connection, validador='TABLAS')
+    
+    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
     for vtbl in gvtbl:
         if vtbl in gtbl:
+            mensaje = f'Tabla o ficha correcta -> {vtbl}'
             arcpy.AddMessage(F"Tabla o ficha correcta -> {vtbl}")
         else:
             count_errors+= 1
+            mensaje = f'Tabla o ficha correcta -> {vtbl}'
             arcpy.AddError(F"Tabla o ficha del MDG faltante -> {vtbl}")
+        _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
+
 
     for tbl in gtbl:
-        if not tbl in gvtbl:
+        if tbl not in gvtbl:
             count_errors+= 1
-            arcpy.AddError(F"Tabla o ficha no incluido en el MDG -> {tbl}")
+            mensaje = f'Tabla o ficha no incluido en el MDG -> {tbl}'
+            _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
+            arcpy.AddError(mensaje)
 
     arcpy.AddMessage(F"Errores encontrados: {count_errors}")
 
