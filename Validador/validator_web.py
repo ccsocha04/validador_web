@@ -1,54 +1,13 @@
-from importlib.resources import path
+import arcpy
 import os
 import sys
-from typing import List
-import arcpy
-from zipfile import ZipFile
 import pandas as pd
 
-def get_version_datasets(version: str) -> List[str]:
-    """
-    Get all feature datasets in a geodatabase
-    """
-    arcpy.AddMessage("1. Getting version ...")
-    walk_gvds = arcpy.da.Walk(topdown=True, datatype="FeatureDataset")
-    feature_datasets_dict = dict()
-    for dirpath, dirnames, fnames in walk_gvds:
-        for gvds in dirnames:
-            gvds_crs = arcpy.Describe(os.path.join(dirpath, gvds)).spatialReference
-            feature_datasets_dict[gvds] = [gvds_crs.GCSCode, gvds_crs.GCSName]
 
-    arcpy.AddMessage(F"1.1 Version_Datasets: {len(feature_datasets_dict)}")
-
-    return feature_datasets_dict
-
-def get_version_feature_classes(version: str) -> List[str]:
-    """
-    Get all feature classes in a geodatabase
-    """
-    walk_gvfcs = arcpy.da.Walk(topdown=True, datatype="FeatureClass")
-    feature_classes = []
-    for dirpath, dirnames, fnames in walk_gvfcs:
-        for fc in fnames:
-            feature_classes.append(fc)
-    
-    arcpy.AddMessage(F"1.2 Version_Feature_Classes: {len(feature_classes)}")
-    
-    return feature_classes
-
-def get_version_tables(version: str) -> List[str]:
-    """
-    Get all tables in a geodatabase
-    """
-    walk_gvtables = arcpy.da.Walk(topdown=True, datatype="Table")
-    tables = []
-    for dirpath, dirnames, fnames in walk_gvtables:
-        for table in fnames:
-            tables.append(table)
-    
-    arcpy.AddMessage(F"1.3 Version_Tables: {len(tables)}")
-    
-    return tables
+from importlib.resources import path
+from typing import List, Dict
+from zipfile import ZipFile
+from utils.utils import conversion_format, set_workspace
 
 def extract_files(file_path: str, extract_path: str):
     """
@@ -76,23 +35,6 @@ def extract_files(file_path: str, extract_path: str):
             arcpy.AddMessage(F"2.3 File date: {file_date}")
             set_workspace(F"{extract_path}\{file_name}.gdb")
 
-def conversion_format(path: str):
-    """
-    Convert all files to geodatabase
-    """
-    # TODO - Add conversion to geodatabase
-    arcpy.AddMessage("2.4 Converting files to geodatabase...")
-    arcpy.AddMessage("2.5 Converting feature datasets...")
-    arcpy.AddMessage("2.6 Converting feature classes...")
-    arcpy.AddMessage("2.7 Converting tables...")
-
-def set_workspace(path: str):
-    """
-    Set workspace
-    """
-    arcpy.AddMessage("3. Setting workspace...")
-    arcpy.env.workspace = path
-    arcpy.env.overwriteOutput = True
 
 def spatial_matching():
     """
@@ -324,9 +266,13 @@ def get_tables():
     
     return tables
     
-def reference_system(gvds, gds):
+def reference_system(gvds: Dict[str, List[str]], gds: List[str]):
     """
-    Reference Sysetm
+    Reference System
+
+    Args:
+        gvds Dict[str, List[str]]: Datasets de la versión
+        gds Dict[str, List[str]]: Datasets de la gdb a ser comprobada
     """
     arcpy.AddMessage("5. Reference system...")
     arcpy.AddMessage("Verificación sistema de referencia")
@@ -340,25 +286,36 @@ def reference_system(gvds, gds):
                 arcpy.AddError(F"Sistema de referencia, el sistema correcto debe ser {gvds[key_gds][1]} (EPSG: {gvds[key_gds][0]}) -> {key_gds}")
     arcpy.AddMessage(F"Errores encontrados: {count_errors}")
 
-
-def quantity_dataset(gvds, gds):
+def quantity_dataset(connection, id, gvds, gds):
     """
     Quantity of datasets
     """
     arcpy.AddMessage("6. Quantity of datasets...")
     arcpy.AddMessage("Verificación dataset")
     count_errors= 0
+    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL) VALUES (:id_db, :mensaje)"""
     for key_gvds in gvds.items():
         if key_gvds[0] in gds:
-            arcpy.AddMessage(F"Dataset correcto -> {key_gvds[0]}")
+            mensaje = f'Dataset correcto -> {key_gvds[0]}'
+            
+            with connection.cursor() as cur:
+                cur.execute(sql, [id, mensaje])
+            arcpy.AddMessage(mensaje)
         else:
             count_errors+= 1
-            arcpy.AddError(F"Dataset del MDG faltante -> {key_gvds[0]}")
+            mensaje = f'Dataset del MDG faltante -> {key_gvds[0]}'
+            with connection.cursor() as cur:
+                cur.execute(sql, [id, mensaje])
+            arcpy.AddError(mensaje)
+
     for key_gds, value_gds in gds.items():
         if not key_gds in gvds:
-            count_errors+= 1
-            arcpy.AddError(F"Dataset no incluido en el MDG -> {key_gds}")
-
+            count_errors+=1
+            mensaje = f"Dataset no incluido en el MDG -> {key_gds}"
+            with connection.cursor() as cur:
+                cur.execute(sql, [id, mensaje])
+            arcpy.AddError(mensaje)
+    
     arcpy.AddMessage(F"Errores encontrados: {count_errors}")
 
 def quantity_feature_class(gvfc, gfc):
@@ -406,62 +363,3 @@ def quantity_tables(gvtbl, gtbl):
     arcpy.AddMessage(F"Errores encontrados: {count_errors}")
 
 
-if __name__ == '__main__':
-
-    # Get version GDB
-    gdb_structure = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Estructura\SIGM_MINERIA.gdb"
-    path = arcpy.env.workspace = gdb_structure
-    arcpy.env.overwriteOutput = True
-    # Feature Datasets
-    version_ds = get_version_datasets(path)
-    # Feature Classes
-    version_fc = get_version_feature_classes(path)
-    # Tables
-    version_tbl = get_version_tables(path)
-    
-    # Get input GDB / GPKG
-
-    # Test - GDB Spatial Matching -> Expediente IDO-08061_20220303 -> False
-    # file_path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data\IDO-08061_20220303.gdb.zip"
-    # Test - GDB Spatial Matching -> Expediente IDO-08061_20220303 -> True
-    # file_path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data\IDO-08061_20220307.gdb.zip"
-    # Test - GDB Spatial Matching -> Expediente GBH-141_20220303 -> True
-    # file_path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data\GBH-141_20220303.gdb.zip"
-
-    # Test - GDB Spatial Matching - System Reference -> Expediente IDO-08061_20220303 -> False
-    file_path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data\IDO-08061_202203071.gdb.zip"
-    
-    # Test - GDB GPKG -> Expediente IDO-08062_20220303
-    # file_path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data\IDO-08062_20220303.zip"
-    
-    extract_path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data"
-
-    # Extract files
-    extract_files(file_path, extract_path)
-
-    # Get Datasets
-    ds = get_feature_datasets()
-
-    # Get Feature Classes
-    fc = get_feature_classes()
-
-    # Get Feature Classes
-    tbl = get_tables()
-    
-    # Validator 1 - Spatial Matching
-    validate_1 = spatial_matching()
-
-    # Validator 2 - Reference System
-    validate_2 = reference_system(version_ds, ds)
-
-    # Validator 3 - Quantity of datasets
-    validate_3 = quantity_dataset(version_ds, ds)
-
-    # Validator 4 - Quantity of feature classes
-    validate_4 = quantity_feature_class(version_fc, fc)
-
-    # Validator 5 - Quantity of tables
-    validate_5 = quantity_tables(version_tbl, tbl)
-
-    # Validator 6 - Required fields
-    # Validator 7 - Attributive characteristics
