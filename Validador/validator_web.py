@@ -5,7 +5,7 @@ import pandas as pd
 
 
 from importlib.resources import path
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from zipfile import ZipFile
 from utils.utils import conversion_format, set_workspace
 
@@ -267,7 +267,7 @@ def get_tables():
     
     return tables
     
-def reference_system(connection, id, gvds: Dict[str, List[str]], gds: List[str]):
+def reference_system(connection, id, ds_version: Dict[str, List[str]], ds_validacion: List[str]):
     """
     Reference System
 
@@ -276,20 +276,38 @@ def reference_system(connection, id, gvds: Dict[str, List[str]], gds: List[str])
         gds Dict[str, List[str]]: Datasets de la gdb a ser comprobada
     """
     id_validador = _id_validador(connection, validador='SISTEMA DE REFERENCIA')
+    version = '1'
+    codigo, nombre = _get_srs(connection=connection, version=version)
+    # TODO cuidado con esto
+    codigo = int(codigo)
+    
     sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
     arcpy.AddMessage("5. Reference system...")
     arcpy.AddMessage("Verificación sistema de referencia")
     count_errors= 0
-    for key_gds, value_gds in gds.items():
-        if key_gds in gvds:
-            if value_gds == gvds[key_gds][0]:
-                mensaje = f'Sistema de referencia correcto {gvds[key_gds][1]} (EPSG: {gvds[key_gds][0]}) -> {key_gds}'
+    for key_gds, value_gds in ds_validacion.items():
+        if key_gds in ds_version:
+            if value_gds == codigo:
+                mensaje = f'Sistema de referencia correcto {ds_version[key_gds][1]} (EPSG: {ds_version[key_gds][0]}) -> {key_gds}'
                 arcpy.AddMessage(mensaje)
             else:
                 count_errors+= 1
-                mensaje = f'Sistema de referencia, el sistema correcto debe ser {gvds[key_gds][1]} (EPSG: {gvds[key_gds][0]}) -> {key_gds}'
+                mensaje = f'Sistema de referencia, incorrecto el sistema debe ser {ds_version[key_gds][1]} (EPSG: {ds_version[key_gds][0]}) -> {key_gds}'
             _insert_mensaje(connection=connection, sql=sql, id_gdb=id, mensaje=mensaje, id_validador=id_validador)    
     arcpy.AddMessage(F"Errores encontrados: {count_errors}")
+
+def _get_srs(connection, version: str)-> Tuple[str, str]:
+    """
+    Obtiene el codigo y el sistema de referencia utilizado por una versión específica.
+    Args:
+        conn : Una conexión a la base de datos.
+        version str: la versión de la validación.
+    Returns:
+        codigo, nombre Tuple[str, str]: codigo y nombre del sistema de referencia de validación.    
+    """
+    with connection.cursor() as cur:
+        return cur.execute("""SELECT SRSCODE, NOMBRE FROM MJEREZ.VALW_SRS SRS
+            INNER JOIN MJEREZ.VALW_VERSION VER ON  VER.ID = SRS.VERSION_ID WHERE VER.VERSION = :version""", version=version).fetchone()
 
 
 def _insert_mensaje(connection, sql: str, id_gdb: int, mensaje: str, id_validador:int)->None:

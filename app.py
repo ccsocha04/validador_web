@@ -30,13 +30,14 @@ if __name__ == '__main__':
     version_tbl = get_version_tables(con)
     
     # file_path = str(current_path.parent.absolute().joinpath(data_folder).joinpath(zip_file))
-    
+    # TODO esto debe ser leido de la base de datos
     # extract_path = str(current_path.parent.absolute().joinpath(data_folder))
 
     # Extract files
     # TODO verificar que path no termine en zip. si es así se debe desempaquetar y actualizar la ruta
     #  enla base de datos
-    # extract_files(file_path, extract_path)
+    # if ruta_gdb.endswith('.zip'):
+    #    extract_files(file_path, extract_path)
     set_workspace(ruta_gdb)
 
     # Get Datasets
@@ -65,3 +66,4 @@ if __name__ == '__main__':
 
     # Validator 6 - Required fields
     # Validator 7 - Attributive characteristics
+    # TODO actualizar estado de la gdb
