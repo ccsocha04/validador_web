@@ -16,7 +16,7 @@ if __name__ == '__main__':
     path = r'E:\VWMDG\validador_web\Data\IDO-08061_202203071.gdb'
     id_bd_gdb, ruta_gdb = gdb_para_validar(con, gdb=path)
     
-    update_estado(con, id=id_bd_gdb)
+    update_estado(con, id=id_bd_gdb, estado='En proceso')
     borrar_registros_mensajes(con, id=id_bd_gdb)
 
     
@@ -67,3 +67,5 @@ if __name__ == '__main__':
     # Validator 6 - Required fields
     # Validator 7 - Attributive characteristics
     # TODO actualizar estado de la gdb
+
+    update_estado(con, id=id_bd_gdb, estado='Finalizado')

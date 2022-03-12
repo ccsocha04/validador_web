@@ -44,16 +44,23 @@ def gdb_para_validar(connection, gdb: str) -> Tuple[str, str]:
         id, ruta = row
         return id, ruta
 
-def update_estado(connection, id) -> None:
+def update_estado(connection, id: int, estado:str) -> None:
     """
     Actualiza el estado de la base de datos
     """
     sql = """
-    UPDATE MJEREZ.VALW_GDBS_VALIDAR SET ESTADO_ID = 1 WHERE ID = :id_bd
+    UPDATE MJEREZ.VALW_GDBS_VALIDAR SET ESTADO_ID = :estado WHERE ID = :id_bd
+    """
+    id_estado = get_id_estado(connection, estado)
+    with connection.cursor() as cur:
+        cur.execute(sql, estado=id_estado, id_bd=id)
+
+def get_id_estado(connection, estado:str) -> int:
+    sql = """
+    SELECT ID_ESTADO_PROCESO FROM MJEREZ.VALW_ESTADO_PROCESO WHERE ESTADO = :estado
     """
     with connection.cursor() as cur:
-        cur.execute(sql, id_bd=id)
-
+        return cur.execute(sql, estado=estado).fetchone()[0]
 
 def borrar_registros_mensajes(connection, id) -> None:
     """
