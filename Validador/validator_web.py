@@ -7,8 +7,9 @@ import pandas as pd
 from importlib.resources import path
 from typing import List, Dict, Tuple
 from zipfile import ZipFile
-from utils.utils import conversion_format, set_workspace, valw_gdb_mensaje
-from database.connection import schema
+from utils.utils import (conversion_format, set_workspace, valw_gdb_mensaje, 
+    valw_dom_validadores, valw_srs, valw_version)
+from database.connection import pd_upper_columns, schema
 
 def extract_files(file_path: str, extract_path: str):
     """
@@ -245,7 +246,6 @@ def get_feature_datasets():
             dataset_codes.append(str(gds_crs))
     return pd.DataFrame({'DATASETS': datasets, 'SRSCODES': dataset_codes})
 
-
 def get_feature_classes():
     """
     Get all feature classes
@@ -271,7 +271,7 @@ def get_tables():
     
     return pd.DataFrame({'TABLAS': tables})
     
-def reference_system(connection, engine, id, ds_version: Dict[str, List[str]], ds_validacion: List[str]):
+def reference_system(connection, version:str ,engine, id, ds_version: Dict[str, List[str]], ds_validacion: List[str]):
     """
     Reference System
 
@@ -281,9 +281,8 @@ def reference_system(connection, engine, id, ds_version: Dict[str, List[str]], d
     # TODO eliminar connection y usar solo engine.
     # TODO hacer un setup de configs
     """
-    id_validador = _id_validador(connection, validador='SISTEMA DE REFERENCIA')
-    version = '1'
-    codigo, nombre = _get_srs(connection=connection, version=version)
+    id_validador = _id_validador(engine=engine, validador=valw_dom_validadores.srs)
+    codigo, nombre = _get_srs(connection=engine, version=version)
     # TODO cuidado con esto
     codigo = int(codigo)
     df_comp = ds_version[['DS_NOMBRE', 'SRSCODE']]
@@ -333,8 +332,13 @@ def reference_system(connection, engine, id, ds_version: Dict[str, List[str]], d
         valw_gdb_mensaje.validador_id, 
         valw_gdb_mensaje.mensaje_column]].copy()
 
-    final.to_sql(name='VALW_GDB_MENSAJE',
-    con=engine, schema=schema, if_exists='append', index=False, chunksize=1000
+    final.to_sql(
+        name=valw_gdb_mensaje.table_name,
+        con=engine, 
+        schema=schema, 
+        if_exists='append', 
+        index=False, 
+        chunksize=1000
     )    
 
 def _get_srs(connection, version: str)-> Tuple[str, str]:
@@ -346,9 +350,15 @@ def _get_srs(connection, version: str)-> Tuple[str, str]:
     Returns:
         codigo, nombre Tuple[str, str]: codigo y nombre del sistema de referencia de validación.    
     """
-    with connection.cursor() as cur:
-        return cur.execute(f"""SELECT SRSCODE, NOMBRE FROM {schema}.VALW_SRS SRS
-            INNER JOIN MJEREZ.VALW_VERSION VER ON  VER.ID = SRS.VERSION_ID WHERE VER.VERSION = :version""", version=version).fetchone()
+    sql = f"""SELECT {valw_srs.srscode}, {valw_srs.nombre} FROM {schema}.{valw_srs.table_name} SRS
+            INNER JOIN {schema}.{valw_version.table_name} VER ON  VER.{valw_version.id} 
+            = SRS.{valw_srs.version_id} WHERE VER.{valw_version.version} = {version}"""
+    df = pd_upper_columns(sql, connection)
+    df.reset_index(inplace=True)
+    srs_code = df[valw_srs.srscode][0]
+    nombre = df[valw_srs.nombre][0]
+
+    return srs_code, nombre
 
 
 def _insert_mensaje(connection, sql: str, id_gdb: int, mensaje: str, id_validador:int)->None:
@@ -356,7 +366,7 @@ def _insert_mensaje(connection, sql: str, id_gdb: int, mensaje: str, id_validado
     with connection.cursor() as cur:
         cur.execute(sql, [id_gdb, mensaje, id_validador])
 
-def _id_validador(connection, validador:str)->int:
+def _id_validador(engine ,validador:str)->int:
     """
     Retorna el ID de la tabla VALW_DOM_VALIDADORES.
     Args:
@@ -365,9 +375,10 @@ def _id_validador(connection, validador:str)->int:
     RETURNS:
         int: el ID de la DESCRIPCIÓN.
     """
-    with connection.cursor() as cur:
-        return cur.execute(f"""SELECT ID FROM {schema}.VALW_DOM_VALIDADORES 
-            WHERE DESCRIPCION = :validador""", validador=validador).fetchone()[0]
+    sql = f"""SELECT {valw_dom_validadores.id}, {valw_dom_validadores.descripcion} 
+            FROM {schema}.{valw_dom_validadores.table_name}"""
+    df = pd_upper_columns(sql, engine)
+    return df[(df[valw_dom_validadores.descripcion] == validador)].reset_index()['ID'][0]
         
 
 

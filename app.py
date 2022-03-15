@@ -53,7 +53,8 @@ if __name__ == '__main__':
     #validate_1 = spatial_matching()
 
     # Validator 2 - Reference System
-    reference_system(con, engine, id_bd_gdb, version_ds, ds)
+    version='1'
+    reference_system(con, version, engine, id_bd_gdb, version_ds, ds)
 
     # Validator 3 - Quantity of datasets
     quantity_dataset(con, id_bd_gdb, version_ds, ds)

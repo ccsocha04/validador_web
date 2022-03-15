@@ -1,3 +1,4 @@
+from lib2to3.pytree import Base
 import arcpy
 import os
 import sys
@@ -29,9 +30,34 @@ def set_workspace(path: str) -> None:
     arcpy.env.overwriteOutput = True
 
 class ValwGdbMensaje(BaseModel):
+    table_name: str = 'VALW_GDB_MENSAJE'
     gdb_id_column: str = 'GDB_ID' 
     validador_id: str = 'VALIDADOR_ID'
     mensaje_column: str = 'MENSAJE_VAL'
 
+
+
+
+class ValwDomValidadores(BaseModel):
+    table_name: str = 'VALW_DOM_VALIDADORES'
+    id: str = 'ID'
+    descripcion: str='DESCRIPCION'
+    srs: str = 'SISTEMA DE REFERENCIA'
+
+class ValwSRS(BaseModel):
+    table_name: str = 'VALW_SRS'
+    srscode: str = 'SRSCODE'
+    nombre: str = 'NOMBRE'
+    version_id: str = 'VERSION_ID'
+
+class ValwVersion(BaseModel):
+    table_name: str ='VALW_VERSION'
+    version: str = 'VERSION' 
+    id: str = 'ID'
+
+
+valw_srs = ValwSRS()
+valw_version = ValwVersion()
 valw_gdb_mensaje = ValwGdbMensaje()
+valw_dom_validadores = ValwDomValidadores()
     
