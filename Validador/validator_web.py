@@ -1,6 +1,7 @@
 import arcpy
 import os
 import sys
+from importlib_metadata import version
 import pandas as pd
 
 
@@ -270,8 +271,19 @@ def get_tables():
                 tables.append(fc)
     
     return pd.DataFrame({'TABLAS': tables})
+
+def left_join_ds_version_ds_validacion(
+    ds_version: pd.DataFrame,
+    ds_validacion: pd.DataFrame
+)-> pd.DataFrame:
+    df_comp = ds_version[['DS_NOMBRE', 'SRSCODE']]
+    return df_comp.merge(ds_validacion, 
+        how='left', 
+        left_on='DS_NOMBRE', 
+        right_on='DATASETS')
     
-def reference_system(connection, version:str ,engine, id, ds_version: Dict[str, List[str]], ds_validacion: List[str]):
+def reference_system(connection, 
+    version:str ,engine, id, ds_version: Dict[str, List[str]], ds_validacion: List[str]):
     """
     Reference System
 
@@ -285,24 +297,9 @@ def reference_system(connection, version:str ,engine, id, ds_version: Dict[str, 
     codigo, nombre = _get_srs(connection=engine, version=version)
     # TODO cuidado con esto
     codigo = int(codigo)
-    df_comp = ds_version[['DS_NOMBRE', 'SRSCODE']]
-    version_vs_gdb = df_comp.merge(ds_validacion, 
-        how='left', 
-        left_on='DS_NOMBRE', 
-        right_on='DATASETS')
-    
-    # verificar si existen datasets ausentes.
-
-    if version_vs_gdb.isna().sum().sum() > 0 :
-        ausentes = version_vs_gdb[(version_vs_gdb['DS_NOMBRE'] != version_vs_gdb['DATASETS'])].copy()
-        if len(ausentes) > 0:
-            ausentes[valw_gdb_mensaje.mensaje_column] = ausentes['DS_NOMBRE'].apply(lambda x : f'Dataset del MDG faltante -> {x}')
-    
-
-    # verificar datasets correctos
-    presentes = version_vs_gdb[(version_vs_gdb['DS_NOMBRE'] == version_vs_gdb['DATASETS'])].copy()
-    if len(presentes) > 0:
-        presentes[valw_gdb_mensaje.mensaje_column] = presentes['DS_NOMBRE'].apply(lambda x : f'Dataset correcto -> {x}')
+    version_vs_gdb = left_join_ds_version_ds_validacion(
+        ds_version=ds_version,
+        ds_validacion=ds_validacion) 
 
     # verificar sistema de referencia incorrecto
     srs_incorrecto = version_vs_gdb[
@@ -382,7 +379,7 @@ def _id_validador(engine ,validador:str)->int:
         
 
 
-def quantity_dataset(connection, id, gvds, gds) -> None:
+def quantity_dataset(engine, id, ds_version:pd.DataFrame, ds_validacion:pd.DataFrame) -> None:
     """
     Persiste la información de las diferencias o exactitudes de la validación referente a datasets.
 
@@ -397,30 +394,72 @@ def quantity_dataset(connection, id, gvds, gds) -> None:
     """
     arcpy.AddMessage("6. Quantity of datasets...")
     arcpy.AddMessage("Verificación dataset")
-    count_errors= 0
-    id_validador = _id_validador(connection, validador='DATASETS')
-    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
-    for key_gvds in gvds.items():
-        if key_gvds[0] in gds:
-            mensaje = f'Dataset correcto -> {key_gvds[0]}'
-            
-            _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
-            arcpy.AddMessage(mensaje)
-        else:
-            count_errors+= 1
-            mensaje = f'Dataset del MDG faltante -> {key_gvds[0]}'
-            with connection.cursor() as cur:
-                _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
-            arcpy.AddError(mensaje)
-
-    for key_gds, _ in gds.items():
-        if not key_gds in gvds:
-            count_errors+=1
-            mensaje = f"Dataset no incluido en el MDG -> {key_gds}"
-            _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
-            arcpy.AddError(mensaje)
     
-    arcpy.AddMessage(F"Errores encontrados: {count_errors}")
+    id_validador = _id_validador(engine, validador=valw_dom_validadores.datasets)
+    
+    version_vs_gdb = left_join_ds_version_ds_validacion(
+        ds_version=ds_version,
+        ds_validacion=ds_validacion)
+    version_vs_gdb = version_vs_gdb[['DS_NOMBRE', 'DATASETS']].copy()
+
+    # verificar si existen datasets ausentes.
+    if version_vs_gdb.isna().sum().sum() > 0 :
+        ausentes = version_vs_gdb[
+            (version_vs_gdb['DS_NOMBRE'] != version_vs_gdb['DATASETS'])
+            ].copy()
+        if len(ausentes) > 0:
+            ausentes[valw_gdb_mensaje.mensaje_column] = ausentes['DS_NOMBRE'].\
+                apply(lambda x : f'Dataset del MDG faltante -> {x}')
+    
+    # verificar datasets correctos
+    presentes = version_vs_gdb[
+        (version_vs_gdb['DS_NOMBRE'] == version_vs_gdb['DATASETS'])
+        ].copy()
+    if len(presentes) > 0:
+        presentes[valw_gdb_mensaje.mensaje_column] = presentes['DS_NOMBRE'].\
+            apply(lambda x : f'Dataset correcto -> {x}')
+
+    # verificar datasets sobrantes
+    
+    gdb_vs_version_ds = ds_validacion.merge(
+        ds_version, 
+        how='left', 
+        left_on='DATASETS', 
+        right_on='DS_NOMBRE')[['DS_NOMBRE', 'DATASETS']].copy()
+    if len(gdb_vs_version_ds) > 0:
+        ds_adicionales = gdb_vs_version_ds[
+            (gdb_vs_version_ds['DS_NOMBRE'] != gdb_vs_version_ds['DATASETS'])
+            ].copy()
+        ds_adicionales[valw_gdb_mensaje.mensaje_column] = ds_adicionales['DATASETS'].\
+            apply(lambda x: f'Dataset no incluido en el MDG -> {x}')
+        ds_adicionales[valw_gdb_mensaje.gdb_id_column] = id
+        ds_adicionales[valw_gdb_mensaje.validador_id] = id_validador
+        ds_adicionales = ds_adicionales[[
+            valw_gdb_mensaje.gdb_id_column,
+            valw_gdb_mensaje.validador_id,
+            valw_gdb_mensaje.mensaje_column]].copy()
+    
+    final = pd.concat([ausentes, presentes])
+    final[valw_gdb_mensaje.gdb_id_column] = id
+    final[valw_gdb_mensaje.validador_id] = id_validador
+    final = final[[
+        valw_gdb_mensaje.gdb_id_column,
+        valw_gdb_mensaje.validador_id,
+        valw_gdb_mensaje.mensaje_column]].copy()
+    final = pd.concat([final, ds_adicionales])
+    
+    # TODO hacer de esto una funcion
+    final.to_sql(
+        name=valw_gdb_mensaje.table_name,
+        con=engine, 
+        schema=schema, 
+        if_exists='append', 
+        index=False, 
+        chunksize=1000
+    )
+
+
+    print('stop')
 
 def quantity_feature_class(connection, id, gvfc, gfc) -> None:
     """

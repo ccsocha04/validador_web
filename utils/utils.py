@@ -36,13 +36,12 @@ class ValwGdbMensaje(BaseModel):
     mensaje_column: str = 'MENSAJE_VAL'
 
 
-
-
 class ValwDomValidadores(BaseModel):
     table_name: str = 'VALW_DOM_VALIDADORES'
     id: str = 'ID'
     descripcion: str='DESCRIPCION'
     srs: str = 'SISTEMA DE REFERENCIA'
+    datasets: str = 'DATASETS'
 
 class ValwSRS(BaseModel):
     table_name: str = 'VALW_SRS'

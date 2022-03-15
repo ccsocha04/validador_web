@@ -36,16 +36,20 @@ def gdb_para_validar(connection, gdb: str) -> Tuple[str, str]:
 
     #TODO si no existe se busca el siguiente en cuyo caso debe haber un estado
     que diga error, o algo. en la tabla VALW_ESTADO_PROCESO.
+
+    # TODO en caso de que no la entre debe arrojar un mensaje claro.
     """
-    sql = f"""
-        SELECT ID, RUTA FROM MJEREZ.VALW_GDBS_VALIDAR  gdb_val
-        WHERE RUTA = '{gdb}'
-        """
-    # TODO en caso de que no se actualice hay un TypeError.
-    df = pd_upper_columns(sql, connection)
-    if df.shape[0] > 1:
-        raise ValidationError('No pueden existir dos registros iguales de gdb en la base de datos. Revise la unicidad.')
-    return int(df.loc[0, 'ID']), df.loc[0,'RUTA']
+    try: 
+        sql = f"""
+            SELECT ID, RUTA FROM MJEREZ.VALW_GDBS_VALIDAR  gdb_val
+            WHERE RUTA = '{gdb}'
+            """
+        df = pd_upper_columns(sql, connection)
+        if df.shape[0] > 1:
+            raise ValidationError('No pueden existir dos registros iguales de gdb en la base de datos. Revise la unicidad.')
+        return int(df.loc[0, 'ID']), df.loc[0,'RUTA']
+    except Exception:
+        raise TypeError('No se encuentra el path que está intentando validar en la base de datos.')
 
 def update_estado(connection, id: int, estado:str) -> None:
     """

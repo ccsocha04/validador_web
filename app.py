@@ -57,7 +57,7 @@ if __name__ == '__main__':
     reference_system(con, version, engine, id_bd_gdb, version_ds, ds)
 
     # Validator 3 - Quantity of datasets
-    quantity_dataset(con, id_bd_gdb, version_ds, ds)
+    quantity_dataset(engine, id_bd_gdb, version_ds, ds)
 
     # Validator 4 - Quantity of feature classes
     quantity_feature_class(con, id_bd_gdb, version_fc, fc)
