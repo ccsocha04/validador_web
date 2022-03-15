@@ -5,7 +5,7 @@ from Validador.validator_web import (extract_files, get_feature_classes, get_fea
 from Validador.version_info import get_version_datasets, get_version_feature_classes, get_version_tables
 from utils.utils import set_workspace
 from pathlib import Path
-from database.connection import con
+from database.connection import con, engine
 from database.gdb_path_to_validate import por_validar, gdb_para_validar, update_estado, borrar_registros_mensajes
 
 
@@ -14,7 +14,7 @@ if __name__ == '__main__':
 
     #if cantidad > 0:
     path = r'E:\VWMDG\validador_web\Data\IDO-08061_202203071.gdb'
-    id_bd_gdb, ruta_gdb = gdb_para_validar(con, gdb=path)
+    id_bd_gdb, ruta_gdb = gdb_para_validar(engine, gdb=path)
     
     update_estado(con, id=id_bd_gdb, estado='En proceso')
     borrar_registros_mensajes(con, id=id_bd_gdb)
@@ -23,11 +23,11 @@ if __name__ == '__main__':
     # Get version GDB
     
     # Feature Datasets
-    version_ds = get_version_datasets(con)
+    version_ds = get_version_datasets(engine)
     # Feature Classes
-    version_fc = get_version_feature_classes(con)
+    version_fc = get_version_feature_classes(engine)
     # Tables
-    version_tbl = get_version_tables(con)
+    version_tbl = get_version_tables(engine)
     
     # file_path = str(current_path.parent.absolute().joinpath(data_folder).joinpath(zip_file))
     # TODO esto debe ser leido de la base de datos
@@ -53,7 +53,7 @@ if __name__ == '__main__':
     #validate_1 = spatial_matching()
 
     # Validator 2 - Reference System
-    reference_system(con, id_bd_gdb, version_ds, ds)
+    reference_system(con, engine, id_bd_gdb, version_ds, ds)
 
     # Validator 3 - Quantity of datasets
     quantity_dataset(con, id_bd_gdb, version_ds, ds)

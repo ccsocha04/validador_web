@@ -1,5 +1,8 @@
+import pandas as pd
 from typing import Tuple
 
+from pydantic import ValidationError
+from database.connection import pd_upper_columns
 
 def por_validar (connection) -> int:
     """
@@ -34,15 +37,15 @@ def gdb_para_validar(connection, gdb: str) -> Tuple[str, str]:
     #TODO si no existe se busca el siguiente en cuyo caso debe haber un estado
     que diga error, o algo. en la tabla VALW_ESTADO_PROCESO.
     """
-    sql = """
+    sql = f"""
         SELECT ID, RUTA FROM MJEREZ.VALW_GDBS_VALIDAR  gdb_val
-        WHERE RUTA = :ruta
+        WHERE RUTA = '{gdb}'
         """
     # TODO en caso de que no se actualice hay un TypeError.
-    with connection.cursor() as cur:
-        row = cur.execute(sql, ruta=gdb).fetchone()
-        id, ruta = row
-        return id, ruta
+    df = pd_upper_columns(sql, connection)
+    if df.shape[0] > 1:
+        raise ValidationError('No pueden existir dos registros iguales de gdb en la base de datos. Revise la unicidad.')
+    return int(df.loc[0, 'ID']), df.loc[0,'RUTA']
 
 def update_estado(connection, id: int, estado:str) -> None:
     """

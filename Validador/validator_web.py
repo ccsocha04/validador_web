@@ -7,7 +7,8 @@ import pandas as pd
 from importlib.resources import path
 from typing import List, Dict, Tuple
 from zipfile import ZipFile
-from utils.utils import conversion_format, set_workspace
+from utils.utils import conversion_format, set_workspace, valw_gdb_mensaje
+from database.connection import schema
 
 def extract_files(file_path: str, extract_path: str):
     """
@@ -235,12 +236,15 @@ def get_feature_datasets():
     Get all feature datasets in a geodatabase
     """
     walk_gds = arcpy.da.Walk(topdown=True, datatype="FeatureDataset")
-    feature_datasets_dict = dict()
-    for dirpath, dirnames, fnames in walk_gds:
+    datasets = []
+    dataset_codes = []
+    for dirpath, dirnames, _ in walk_gds:
         for gds in dirnames:
             gds_crs = arcpy.Describe(os.path.join(dirpath, gds)).spatialReference.GCSCode
-            feature_datasets_dict[gds] = gds_crs
-    return feature_datasets_dict
+            datasets.append(gds)
+            dataset_codes.append(str(gds_crs))
+    return pd.DataFrame({'DATASETS': datasets, 'SRSCODES': dataset_codes})
+
 
 def get_feature_classes():
     """
@@ -248,11 +252,11 @@ def get_feature_classes():
     """
     walk_fcs = arcpy.da.Walk(topdown=True, datatype="FeatureClass")
     feature_classes = []
-    for dirpath, dirnames, fnames in walk_fcs:
+    for _, dirnames, fnames in walk_fcs:
         for fc in fnames:
             feature_classes.append(fc)
     
-    return feature_classes
+    return pd.DataFrame({'FEATURES': feature_classes})
 
 def get_tables():
     """
@@ -265,36 +269,73 @@ def get_tables():
             if not fc.endswith('__ATTACH'):
                 tables.append(fc)
     
-    return tables
+    return pd.DataFrame({'TABLAS': tables})
     
-def reference_system(connection, id, ds_version: Dict[str, List[str]], ds_validacion: List[str]):
+def reference_system(connection, engine, id, ds_version: Dict[str, List[str]], ds_validacion: List[str]):
     """
     Reference System
 
     Args:
         gvds Dict[str, List[str]]: Datasets de la versión
-        gds Dict[str, List[str]]: Datasets de la gdb a ser comprobada
+        gds Dict[str, List[str]]: Datasets de la gdb a ser comprobada.
+    # TODO eliminar connection y usar solo engine.
+    # TODO hacer un setup de configs
     """
     id_validador = _id_validador(connection, validador='SISTEMA DE REFERENCIA')
     version = '1'
     codigo, nombre = _get_srs(connection=connection, version=version)
     # TODO cuidado con esto
     codigo = int(codigo)
+    df_comp = ds_version[['DS_NOMBRE', 'SRSCODE']]
+    version_vs_gdb = df_comp.merge(ds_validacion, 
+        how='left', 
+        left_on='DS_NOMBRE', 
+        right_on='DATASETS')
     
-    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
-    arcpy.AddMessage("5. Reference system...")
-    arcpy.AddMessage("Verificación sistema de referencia")
-    count_errors= 0
-    for key_gds, value_gds in ds_validacion.items():
-        if key_gds in ds_version:
-            if value_gds == codigo:
-                mensaje = f'Sistema de referencia correcto {ds_version[key_gds][1]} (EPSG: {ds_version[key_gds][0]}) -> {key_gds}'
-                arcpy.AddMessage(mensaje)
-            else:
-                count_errors+= 1
-                mensaje = f'Sistema de referencia, incorrecto el sistema debe ser {ds_version[key_gds][1]} (EPSG: {ds_version[key_gds][0]}) -> {key_gds}'
-            _insert_mensaje(connection=connection, sql=sql, id_gdb=id, mensaje=mensaje, id_validador=id_validador)    
-    arcpy.AddMessage(F"Errores encontrados: {count_errors}")
+    # verificar si existen datasets ausentes.
+
+    if version_vs_gdb.isna().sum().sum() > 0 :
+        ausentes = version_vs_gdb[(version_vs_gdb['DS_NOMBRE'] != version_vs_gdb['DATASETS'])].copy()
+        if len(ausentes) > 0:
+            ausentes[valw_gdb_mensaje.mensaje_column] = ausentes['DS_NOMBRE'].apply(lambda x : f'Dataset del MDG faltante -> {x}')
+    
+
+    # verificar datasets correctos
+    presentes = version_vs_gdb[(version_vs_gdb['DS_NOMBRE'] == version_vs_gdb['DATASETS'])].copy()
+    if len(presentes) > 0:
+        presentes[valw_gdb_mensaje.mensaje_column] = presentes['DS_NOMBRE'].apply(lambda x : f'Dataset correcto -> {x}')
+
+    # verificar sistema de referencia incorrecto
+    srs_incorrecto = version_vs_gdb[
+        (version_vs_gdb['SRSCODE'] != version_vs_gdb['SRSCODES']) 
+        & 
+        (version_vs_gdb['DS_NOMBRE'] == version_vs_gdb['DATASETS'])
+        ].copy()
+    if len(srs_incorrecto)>0:
+        srs_incorrecto[valw_gdb_mensaje.mensaje_column] = srs_incorrecto.apply(lambda x: 
+            f'Sistema de referencia, incorrecto el sistema debe ser {x["DS_NOMBRE"]} -> {x["SRSCODE"]}', axis=1)
+
+    # verificar sistemas de referencia correcto
+    srs_correcto = version_vs_gdb[
+        (version_vs_gdb['SRSCODE'] == version_vs_gdb['SRSCODES']) 
+        & 
+        (version_vs_gdb['DS_NOMBRE'] == version_vs_gdb['DATASETS'])
+        ].copy()
+    if len(srs_correcto)>0:
+        srs_correcto[valw_gdb_mensaje.mensaje_column] = srs_correcto.apply(lambda x: 
+            f'Sistema de referencia correcto {x["DS_NOMBRE"]} -> {x["SRSCODE"]}', axis=1)
+
+    final = pd.concat([srs_incorrecto, srs_correcto])
+    final[valw_gdb_mensaje.gdb_id_column] = id
+    final[valw_gdb_mensaje.validador_id] = id_validador
+    final = final[[
+        valw_gdb_mensaje.gdb_id_column, 
+        valw_gdb_mensaje.validador_id, 
+        valw_gdb_mensaje.mensaje_column]].copy()
+
+    final.to_sql(name='VALW_GDB_MENSAJE',
+    con=engine, schema=schema, if_exists='append', index=False, chunksize=1000
+    )    
 
 def _get_srs(connection, version: str)-> Tuple[str, str]:
     """
@@ -306,7 +347,7 @@ def _get_srs(connection, version: str)-> Tuple[str, str]:
         codigo, nombre Tuple[str, str]: codigo y nombre del sistema de referencia de validación.    
     """
     with connection.cursor() as cur:
-        return cur.execute("""SELECT SRSCODE, NOMBRE FROM MJEREZ.VALW_SRS SRS
+        return cur.execute(f"""SELECT SRSCODE, NOMBRE FROM {schema}.VALW_SRS SRS
             INNER JOIN MJEREZ.VALW_VERSION VER ON  VER.ID = SRS.VERSION_ID WHERE VER.VERSION = :version""", version=version).fetchone()
 
 
@@ -325,7 +366,7 @@ def _id_validador(connection, validador:str)->int:
         int: el ID de la DESCRIPCIÓN.
     """
     with connection.cursor() as cur:
-        return cur.execute("""SELECT ID FROM MJEREZ.VALW_DOM_VALIDADORES 
+        return cur.execute(f"""SELECT ID FROM {schema}.VALW_DOM_VALIDADORES 
             WHERE DESCRIPCION = :validador""", validador=validador).fetchone()[0]
         
 

@@ -8,6 +8,7 @@ from importlib.resources import path
 from typing import List, Dict
 from zipfile import ZipFile
 
+from database.connection import pd_upper_columns
 
 def get_version_datasets(connection) -> Dict[str, List[str]]:
     """
@@ -15,32 +16,27 @@ def get_version_datasets(connection) -> Dict[str, List[str]]:
 
     """
     arcpy.AddMessage("1. Getting version ...")
-    feature_datasets_dict = dict()
-    with connection.cursor() as cur:
-        for row in cur.execute("""SELECT vd.NOMBRE , vs.SRSCODE, vs.NOMBRE FROM MJEREZ.VALW_DATASETS vd
-            INNER JOIN MJEREZ.VALW_SRS vs ON vd.SRS_ID = vs.ID"""):
-            feature_datasets_dict[row[0]] = [row[1], row[2]]
+    sql = f"""SELECT DS.NOMBRE AS DS_NOMBRE, DS.VERSION_ID, SRSCODE, SRS.NOMBRE AS SRS_NOMBRE, OBLIGATORIO
+        FROM MJEREZ.VALW_DATASETS DS 
+        INNER JOIN MJEREZ.VALW_SRS SRS 
+            ON DS.SRS_ID = SRS.ID
 
-    arcpy.AddMessage(F"1.1 Version_Datasets: {len(feature_datasets_dict)}")
-
-    return feature_datasets_dict
+        """
+    df = pd_upper_columns(sql, connection=connection)   
+    arcpy.AddMessage(F"1.1 Version_Datasets: {df.shape[0]}")
+    return df
 
 
 def get_version_feature_classes(connection) -> List[str]:
     """
     Get all feature classes in a geodatabase
-
-    This function is used to get the base feature classes it would be better to read this from DB
     """
-    feature_classes = []
-    with connection.cursor() as cur:
-        for row in cur.execute("""SELECT DISTINCT NOMBRE_OBJETO FROM VALW_OBJETOS_TOTALES vot"""):
-            feature_classes.append(row[0])
-
+    sql = """SELECT GRUPO_DATASET, NOMBRE_OBJETO 
+        FROM VALW_OBJETOS_TOTALES vot"""
+    df = pd_upper_columns(sql, connection=connection)
+    arcpy.AddMessage(F"1.2 Version_Feature_Classes: {df.shape[0]}")
     
-    arcpy.AddMessage(F"1.2 Version_Feature_Classes: {len(feature_classes)}")
-    
-    return feature_classes
+    return df
 
 def get_version_tables(connection) -> List[str]:
     """
@@ -48,12 +44,10 @@ def get_version_tables(connection) -> List[str]:
 
     This function is used to get the base tables it would be better to read this from DB
     """
-    tables = []
-    with connection.cursor() as cur:
-        for row in cur.execute("""SELECT DISTINCT FICHAX FROM VALW_VALIDAR_TABLAS"""):
-            if not row[0].endswith('__ATTACH'):
-                tables.append(row[0])
+    sql = f"""SELECT DISTINCT FICHAX 
+        FROM VALW_VALIDAR_TABLAS"""
+    df = pd_upper_columns(sql, connection=connection)
     
-    arcpy.AddMessage(F"1.3 Version_Tables: {len(tables)}")
+    arcpy.AddMessage(F"1.3 Version_Tables: {df.shape[0]}")
     
-    return tables
+    return df
