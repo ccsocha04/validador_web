@@ -34,6 +34,7 @@ class ValwGdbMensaje(BaseModel):
     gdb_id_column: str = 'GDB_ID' 
     validador_id: str = 'VALIDADOR_ID'
     mensaje_column: str = 'MENSAJE_VAL'
+    bool_column: str = 'ESTA_BIEN'
 
 
 class ValwDomValidadores(BaseModel):

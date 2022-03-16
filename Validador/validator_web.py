@@ -308,6 +308,7 @@ def reference_system(
     if len(srs_incorrecto)>0:
         srs_incorrecto[valw_gdb_mensaje.mensaje_column] = srs_incorrecto.apply(lambda x: 
             f'Sistema de referencia, incorrecto el sistema debe ser {x["DS_NOMBRE"]} -> {x["SRSCODE"]}', axis=1)
+        srs_incorrecto[valw_gdb_mensaje.bool_column] = 0
 
     # verificar sistemas de referencia correcto
     srs_correcto = version_vs_gdb[
@@ -318,6 +319,7 @@ def reference_system(
     if len(srs_correcto)>0:
         srs_correcto[valw_gdb_mensaje.mensaje_column] = srs_correcto.apply(lambda x: 
             f'Sistema de referencia correcto {x["DS_NOMBRE"]} -> {x["SRSCODE"]}', axis=1)
+        srs_correcto[valw_gdb_mensaje.bool_column] = 1
 
     final = pd.concat([srs_incorrecto, srs_correcto])
     final[valw_gdb_mensaje.gdb_id_column] = id
@@ -325,7 +327,8 @@ def reference_system(
     return  final[[
         valw_gdb_mensaje.gdb_id_column, 
         valw_gdb_mensaje.validador_id, 
-        valw_gdb_mensaje.mensaje_column]].copy()  
+        valw_gdb_mensaje.mensaje_column,
+        valw_gdb_mensaje.bool_column]].copy()  
 
 def _get_srs(connection, version: str)-> Tuple[str, str]:
     """
@@ -400,6 +403,7 @@ def quantity_dataset(engine, id, ds_version:pd.DataFrame, ds_validacion:pd.DataF
         if len(ausentes) > 0:
             ausentes[valw_gdb_mensaje.mensaje_column] = ausentes['DS_NOMBRE'].\
                 apply(lambda x : f'Dataset del MDG faltante -> {x}')
+            ausentes[valw_gdb_mensaje.bool_column] = 0
     
     # verificar datasets correctos
     presentes = version_vs_gdb[
@@ -408,6 +412,7 @@ def quantity_dataset(engine, id, ds_version:pd.DataFrame, ds_validacion:pd.DataF
     if len(presentes) > 0:
         presentes[valw_gdb_mensaje.mensaje_column] = presentes['DS_NOMBRE'].\
             apply(lambda x : f'Dataset correcto -> {x}')
+        presentes[valw_gdb_mensaje.bool_column] = 1
 
     # verificar datasets sobrantes
     
@@ -424,10 +429,12 @@ def quantity_dataset(engine, id, ds_version:pd.DataFrame, ds_validacion:pd.DataF
             apply(lambda x: f'Dataset no incluido en el MDG -> {x}')
         ds_adicionales[valw_gdb_mensaje.gdb_id_column] = id
         ds_adicionales[valw_gdb_mensaje.validador_id] = id_validador
+        ds_adicionales[valw_gdb_mensaje.bool_column] = 0
         ds_adicionales = ds_adicionales[[
             valw_gdb_mensaje.gdb_id_column,
             valw_gdb_mensaje.validador_id,
-            valw_gdb_mensaje.mensaje_column]].copy()
+            valw_gdb_mensaje.mensaje_column,
+            valw_gdb_mensaje.bool_column]].copy()
     
     final = pd.concat([ausentes, presentes])
     final[valw_gdb_mensaje.gdb_id_column] = id
@@ -435,7 +442,8 @@ def quantity_dataset(engine, id, ds_version:pd.DataFrame, ds_validacion:pd.DataF
     final = final[[
         valw_gdb_mensaje.gdb_id_column,
         valw_gdb_mensaje.validador_id,
-        valw_gdb_mensaje.mensaje_column]].copy()
+        valw_gdb_mensaje.mensaje_column,
+        valw_gdb_mensaje.bool_column]].copy()
     return pd.concat([final, ds_adicionales])
     
 
@@ -465,14 +473,17 @@ def quantity_feature_class(engine, id, fc_version, fc_gdb) -> pd.DataFrame:
     if len(ausentes_version_gdb) > 0:
         ausentes_version_gdb[valw_gdb_mensaje.mensaje_column] = ausentes_version_gdb['FEATURE'].\
             apply(lambda x: f'Feature class del MDG faltante -> {x}')
+        ausentes_version_gdb[valw_gdb_mensaje.bool_column] = 0
     
     if len(adicionales_gdb_version) > 0:
         adicionales_gdb_version[valw_gdb_mensaje.mensaje_column] = adicionales_gdb_version['FEATURE'].\
             apply(lambda x: f'Feature class no incluido en el MDG -> {x}')
+        adicionales_gdb_version[valw_gdb_mensaje.bool_column] = 0
         
     if len(correctos) > 0:
         correctos[valw_gdb_mensaje.mensaje_column] = correctos['FEATURE'].\
             apply(lambda x: f'Feature class correcto -> {x}')
+        correctos[valw_gdb_mensaje.bool_column] = 1
 
     final = pd.concat([ausentes_version_gdb, adicionales_gdb_version, correctos])
     final[valw_gdb_mensaje.gdb_id_column] = id
@@ -480,7 +491,8 @@ def quantity_feature_class(engine, id, fc_version, fc_gdb) -> pd.DataFrame:
     return final[[
         valw_gdb_mensaje.gdb_id_column,
         valw_gdb_mensaje.validador_id,
-        valw_gdb_mensaje.mensaje_column]].copy()
+        valw_gdb_mensaje.mensaje_column, 
+        valw_gdb_mensaje.bool_column]].copy()
 
 def quantity_tables(engine, id, tbl_version, tbl_gdb) -> pd.DataFrame:
     """
@@ -510,14 +522,17 @@ def quantity_tables(engine, id, tbl_version, tbl_gdb) -> pd.DataFrame:
     if len(ausentes_version_gdb) > 0:
         ausentes_version_gdb[valw_gdb_mensaje.mensaje_column] = ausentes_version_gdb['TABLA'].\
             apply(lambda x: f'Tabla o ficha del MDG faltante -> {x}')
+        ausentes_version_gdb[valw_gdb_mensaje.bool_column] = 0
     
     if len(adicionales_gdb_version) > 0:
         adicionales_gdb_version[valw_gdb_mensaje.mensaje_column] = adicionales_gdb_version['TABLA'].\
             apply(lambda x: f'Tabla o ficha no incluido en el MDG -> {x}')
-        
+        adicionales_gdb_version[valw_gdb_mensaje.bool_column] = 0
+
     if len(correctos) > 0:
         correctos[valw_gdb_mensaje.mensaje_column] = correctos['TABLA'].\
             apply(lambda x: f'Tabla o ficha correcta -> {x}')
+        correctos[valw_gdb_mensaje.bool_column] = 1
 
     final = pd.concat([ausentes_version_gdb, adicionales_gdb_version, correctos])
     final[valw_gdb_mensaje.gdb_id_column] = id
@@ -525,7 +540,8 @@ def quantity_tables(engine, id, tbl_version, tbl_gdb) -> pd.DataFrame:
     return final[[
         valw_gdb_mensaje.gdb_id_column,
         valw_gdb_mensaje.validador_id,
-        valw_gdb_mensaje.mensaje_column]].copy()
+        valw_gdb_mensaje.mensaje_column,
+        valw_gdb_mensaje.bool_column]].copy()
     
 
 

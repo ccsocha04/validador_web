@@ -15,7 +15,7 @@ if __name__ == '__main__':
     # cantidad = por_validar(con)
 
     #if cantidad > 0:
-    # path = r'E:\VWMDG\validador_web\Data\IDO-08061_202203071.gdb'
+    #path = r'E:\VWMDG\validador_web\Data\IDO-08061_202203071.gdb'
     path = r'E:\VWMDG\validador_web\Data\IDO-08061_20220303.gdb'
     id_bd_gdb, ruta_gdb = gdb_para_validar(engine, gdb=path)
     # TODO UPDATE INICIO_VALIDACION
@@ -79,6 +79,6 @@ if __name__ == '__main__':
         schema=schema, 
         if_exists='append', 
         index=False, 
-        chunksize=1000
+        chunksize=1000)
     
     update_estado(con, id=id_bd_gdb, estado='Finalizado')
