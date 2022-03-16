@@ -2,12 +2,14 @@ import arcpy
 import os
 import sys
 import pandas as pd
+import requests
 
 
 from importlib.resources import path
 from typing import List, Dict, Tuple
 from zipfile import ZipFile
 from utils.utils import conversion_format, set_workspace
+
 
 def extract_files(file_path: str, extract_path: str):
     """
@@ -35,200 +37,41 @@ def extract_files(file_path: str, extract_path: str):
             arcpy.AddMessage(F"2.3 File date: {file_date}")
             set_workspace(F"{extract_path}\{file_name}.gdb")
 
-
-def spatial_matching():
+def spatial_matching(connection, id, exp) -> None:
     """
     Spatial matching
     """
+    """
+    Persiste la información de la correspondencia espacial entre el póligono del servicio web geográfico y el feature class cargado en la GDB.
+    Args:
+        connection: Conexión a la base de datos.
+        id int: identificador de la gdba en la tabla VALW_GDBS_VALIDAR.
+        exp: código del expediente.
+    Returns:
+        None
+    """
     arcpy.AddMessage("4. Spatial matching...")
     arcpy.AddMessage("Verificación coincidencia espacial")
+
+    id_validador = _id_validador(connection, validador='ESPACIAL')
+    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
     
-    # TODO - Add request WFS
-    geojson_servicioANM_1 = {
-        "displayFieldName": "",
-        "fieldAliases": {
-            "OBJECTID": "OBJECTID",
-            "SHAPE_Length": "SHAPE_Length",
-            "SHAPE_Area": "SHAPE_Area"
-        },
-        "geometryType": "esriGeometryPolygon",
-        "spatialReference": {
-            "wkid": 4686,
-            "latestWkid": 4686
-        },
-        "fields": [
-            {
-                "name": "OBJECTID",
-                "type": "esriFieldTypeOID",
-                "alias": "OBJECTID"
-            },
-            {
-                "name": "SHAPE_Length",
-                "type": "esriFieldTypeDouble",
-                "alias": "SHAPE_Length"
-            },
-            {
-                "name": "SHAPE_Area",
-                "type": "esriFieldTypeDouble",
-                "alias": "SHAPE_Area"
-            }
-        ],
-        "features": [
-            {
-                "geometry": {
-                    "rings": [
-                        [
-                            [
-                                -74.47880612799997,
-                                5.42205679500006
-                            ],
-                            [
-                                -74.49103233099999,
-                                5.422048681000035
-                            ],
-                            [
-                                -74.49105460199996,
-                                5.455144681000036
-                            ],
-                            [
-                                -74.47882773099997,
-                                5.455152845000043
-                            ],
-                            [
-                                -74.47880612799997,
-                                5.42205679500006
-                            ]
-                        ]
-                    ]
-                },
-                "attributes": {
-                    "CODIGO_EXPEDIENTE": "IDO-08061",
-                    "AREA_HA": 495.92897,
-                    "FECHA_DE_INSCRIPCION": "8/06/2010",
-                    "ESTADO": "Activo",
-                    "MODALIDAD": "CONTRATO DE CONCESION (L 685)",
-                    "ETAPA": "Explotación",
-                    "MINERALES": "ANTRACITA, CARBÓN METALÚRGICO, CARBÓN TÉRMICO",
-                    "NOMBRE_DE_TITULAR": "INVERSIONES NUEVA COLONIA S.A.S.",
-                    "NUMERO_IDENTIFICACION": "900866306",
-                    "TIPO_DE_IDENTIFICACION": "NIT",
-                    "IDENTIFICACION_TITULARES": "57086",
-                    "PTO_PTI": "PTO",
-                    "INSTRUMENTO_AMBIENTAL": "Y",
-                    "DEPARTAMENTOS": "Cundinamarca",
-                    "MUNICIPIOS": "CAPARRAPÍ",
-                    "GRUPO_DE_TRABAJO": "ZONA CENTRO",
-                    "FECHA_TERMINACION": "7/06/2040",
-                    "OBJECTID": 5178,
-                    "SHAPE_Length": 9.06451439618818E-02,
-                    "SHAPE_Area": 4.04649952760689E-04
-                }
-            }
-        ]
-    }
-    geojson_servicioANM_2 = {
-        "displayFieldName": "",
-        "fieldAliases": {
-            "OBJECTID": "OBJECTID",
-            "SHAPE_Length": "SHAPE_Length",
-            "SHAPE_Area": "SHAPE_Area"
-        },
-        "geometryType": "esriGeometryPolygon",
-        "spatialReference": {
-            "wkid": 4686,
-            "latestWkid": 4686
-        },
-        "fields": [
-            {
-                "name": "OBJECTID",
-                "type": "esriFieldTypeOID",
-                "alias": "OBJECTID"
-            },
-            {
-                "name": "SHAPE_Length",
-                "type": "esriFieldTypeDouble",
-                "alias": "SHAPE_Length"
-            },
-            {
-                "name": "SHAPE_Area",
-                "type": "esriFieldTypeDouble",
-                "alias": "SHAPE_Area"
-            }
-        ],
-        "features": [
-            {
-                "geometry": {
-                    "rings": [
-                        [
-                            [
-                                -74.37196390799994,
-                                5.441125020000072
-                            ],
-                            [
-                                -74.37433568799997,
-                                5.438257351000061
-                            ],
-                            [
-                                -74.37716077099998,
-                                5.439847478000047
-                            ],
-                            [
-                                -74.39108764699995,
-                                5.429558979000035
-                            ],
-                            [
-                                -74.39307373099996,
-                                5.431465956000068
-                            ],
-                            [
-                                -74.37623310399994,
-                                5.443410792000066
-                            ],
-                            [
-                                -74.37196390799994,
-                                5.441125020000072
-                            ]
-                        ]
-                    ]
-                },
-                "attributes": {
-                    "CODIGO_EXPEDIENTE": "GBH-141",
-                    "AREA_HA": 76.67445,
-                    "FECHA_DE_INSCRIPCION": "7/09/2006 3:38:11 a.m.",
-                    "ESTADO": "Titulo terminado-en proceso de liquidacion",
-                    "MODALIDAD": "CONTRATO DE CONCESION (L 685)",
-                    "ETAPA": "Explotación",
-                    "MINERALES": "ANHIDRITA, ANTRACITA, ARCILLA COMUN, ARCILLAS, ARCILLAS ESPECIALES, ARCILLAS REFRACTARIAS, ARENAS, ARENAS ARCILLOSAS, ARENAS FELDESPÁTICAS, ARENAS INDUSTRIALES, ARENAS Y GRAVAS SILICEAS, ARENISCAS, ASFALTO NATURAL, AZUFRE, BAUXITA, BENTONITA, CALCITA, CAOLIN, CARBÓN, CARBÓN METALÚRGICO, CARBÓN TÉRMICO, CONCENTRADOS MINERALES DE IRIDIO, CORINDON, CUARZO, DOLOMITA, ESMERALDA, FELDESPATOS, FLUORITA, GRAFITO, GRANATE, GRANITO, GRAVAS, MAGNESITA, MARMOL Y TRAVERTINO, MICA, MINERALES DE ALUMINIO Y SUS CONCENTRADOS, MINERALES DE ANTIMONIO Y SUS CONCENTRADOS, MINERALES DE BARIO, MINERALES DE BORO, MINERALES DE CIRCONIO Y SUS CONCENTRADOS, MINERALES DE COBALTO Y SUS CONCENTRADOS, MINERALES DE COBRE Y SUS CONCENTRADOS, MINERALES DE CROMO Y SUS CONCENTRADOS, MINERALES DE ESTAÑO Y SUS CONCENTRADOS, MINERALES DE HIERRO Y SUS CONCENTRADOS, MINERALES DE LITIO , MINERALES DE MANGANESO Y SUS CONCENTRADOS, MINERALES DE MERCURIO Y SUS CONCENTRADOS, MINERALES DE MOLIBDENO Y SUS CONCENTRADOS, MINERALES DE NIQUEL Y SUS CONCENTRADOS, MINERALES DE ORO Y SUS CONCENTRADOS, MINERALES DE PLATA Y SUS CONCENTRADOS, MINERALES DE PLATINO (INCLUYE PLATINO, PALADIO, RUTENIO, RODIO, OSMIO) Y SUS CONCENTRADOS, MINERALES DE PLOMO Y SUS CONCENTRADOS, MINERALES DE POTASIO, MINERALES DE SODIO, MINERALES DE TANTALIO, MINERALES DE TIERRAS RARAS, MINERALES DE TITANIO Y SUS CONCENTRADOS, MINERALES DE VANADIO Y SUS CONCENTRADOS, MINERALES DE WOLFRAMIO (TUNGSTENO) Y SUS CONCENTRADOS, MINERALES DE ZINC Y SUS CONCENTRADOS, MINERALES Y CONCENTRADOS DE TORIO, MINERALES Y CONCENTRADOS DE URANIO, OTRAS PIEDRAS PRECIOSAS, OTRAS PIEDRAS SEMIPRECIOSAS, OTRAS ROCAS METAMÓRFICAS, OTRAS ROCAS Y MINERALES DE ORIGEN VOLCANICO, OTROS MINERALES DE ALUMINIO Y SUS CONCENTRADOS, PIEDRA POMEZ, PIRITA, PIZARRA, RECEBO, ROCA FOSFATICA, ROCA O PIEDRA CALIZA, ROCA O PIEDRA CORALINA, ROCAS DE CUARCITA, ROCAS DE ORIGEN VOLCÁNICO, PUZOLANA, BASALTO, SAL GEMA, SAL MARINA, SULFATO DE BARIO NATURAL-BARITINA, TALCO, YESO",
-                    "NOMBRE_DE_TITULAR": "RAFAEL GARCIA DELGADO, JOSE RAMON GUERRERO SANTAFE, ARMANDO RAMIREZ MARIN, JOSE FAUBRICIO ZAMUDIO ANZOLA, ANDRES BOTERO HERRERA",
-                    "NUMERO_IDENTIFICACION": "79047350, 10218624, 19341607, 3079240, 79147444",
-                    "TIPO_DE_IDENTIFICACION": "Cédula de Ciudadanía, Cédula de Ciudadanía, Cédula de Ciudadanía, Cédula de Ciudadanía, Cédula de Ciudadanía",
-                    "IDENTIFICACION_TITULARES": "24816, 27744, 35140, 39582, 41542",
-                    "PTO_PTI": "null",
-                    "INSTRUMENTO_AMBIENTAL": "N",
-                    "DEPARTAMENTOS": "Cundinamarca",
-                    "MUNICIPIOS": "YACOPÍ",
-                    "GRUPO_DE_TRABAJO": "ZONA CENTRO",
-                    "FECHA_TERMINACION": "8/07/2019",
-                    "OBJECTID": 3629,
-                    "SHAPE_Length": 5.25209810700847E-02,
-                    "SHAPE_Area": 6.25627113648606E-05
-                }
-            }
-        ]
-    }
-
-    # IDO-08061
-
-    mining_title = arcpy.AsShape(geojson_servicioANM_1, True)
+    url_service_anm = f"https://geo.anm.gov.co/webgis/services/ANM/ServiciosANM/MapServer/WFSServer?service=WFS&version=2.0.0&request=GetFeature&typeName=Titulo_Vigente&PropertyName=CODIGO_EXPEDIENTE,FECHA_DE_INSCRIPCION,ESTADO,MODALIDAD,ETAPA,NOMBRE_DE_TITULAR,Shape&Filter=<ogc:Filter><ogc:PropertyIsEqualTo><ogc:PropertyName>CODIGO_EXPEDIENTE</ogc:PropertyName><ogc:Literal>{exp}</ogc:Literal></ogc:PropertyIsEqualTo></ogc:Filter>&outputformat=ESRIGEOJSON"
+    geojson_service_anm = requests.get(url_service_anm).json()
+    
+    mining_title = arcpy.AsShape(geojson_service_anm, True)
     delimit_proyect_pg = arcpy.MakeFeatureLayer_management(os.path.join(arcpy.env.workspace, "TOPOGRAFIA_LOCAL", "DELIMIT_PROYEC_PG"))
     select_location = arcpy.SelectLayerByLocation_management(delimit_proyect_pg, "ARE_IDENTICAL_TO", mining_title, None, "NEW_SELECTION", "NOT_INVERT")
 
     if int(arcpy.GetCount_management(select_location)[0]) > 0:
-        arcpy.AddMessage("La delimitación del título minero coincide con el polígono estructurado en AnnA Minería. -> DELIMIT_PROYEC_PG")
-        return True
+        mensaje = f'La delimitación del título minero coincide con el polígono estructurado en AnnA Minería -> DELIMIT_PROYEC_PG'
+        _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
+        arcpy.AddMessage(mensaje)
+
     else:
-        arcpy.AddError("Error, La delimitación del título minero no coincide con el polígono estructurado en AnnA Minería. -> DELIMIT_PROYEC_PG")
-        return False
+        mensaje = f'La delimitación del título minero no coincide con el polígono estructurado en AnnA Minería -> DELIMIT_PROYEC_PG'
+        _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
+        arcpy.AddError(mensaje)
 
 def get_feature_datasets():
     """
@@ -270,21 +113,22 @@ def get_tables():
 def reference_system(connection, id, ds_version: Dict[str, List[str]], ds_validacion: List[str]):
     """
     Reference System
-
     Args:
         gvds Dict[str, List[str]]: Datasets de la versión
         gds Dict[str, List[str]]: Datasets de la gdb a ser comprobada
     """
+    
+    arcpy.AddMessage("5. Reference system...")
+    arcpy.AddMessage("Verificación sistema de referencia")
+    
+    count_errors= 0
     id_validador = _id_validador(connection, validador='SISTEMA DE REFERENCIA')
     version = '1'
     codigo, nombre = _get_srs(connection=connection, version=version)
     # TODO cuidado con esto
     codigo = int(codigo)
-    
     sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
-    arcpy.AddMessage("5. Reference system...")
-    arcpy.AddMessage("Verificación sistema de referencia")
-    count_errors= 0
+    
     for key_gds, value_gds in ds_validacion.items():
         if key_gds in ds_version:
             if value_gds == codigo:
@@ -294,11 +138,12 @@ def reference_system(connection, id, ds_version: Dict[str, List[str]], ds_valida
                 count_errors+= 1
                 mensaje = f'Sistema de referencia, incorrecto el sistema debe ser {ds_version[key_gds][1]} (EPSG: {ds_version[key_gds][0]}) -> {key_gds}'
             _insert_mensaje(connection=connection, sql=sql, id_gdb=id, mensaje=mensaje, id_validador=id_validador)    
+    
     arcpy.AddMessage(F"Errores encontrados: {count_errors}")
 
 def _get_srs(connection, version: str)-> Tuple[str, str]:
     """
-    Obtiene el codigo y el sistema de referencia utilizado por una versión específica.
+    Obtiene el código y el sistema de referencia utilizado para una versión específica.
     Args:
         conn : Una conexión a la base de datos.
         version str: la versión de la validación.
@@ -308,7 +153,6 @@ def _get_srs(connection, version: str)-> Tuple[str, str]:
     with connection.cursor() as cur:
         return cur.execute("""SELECT SRSCODE, NOMBRE FROM MJEREZ.VALW_SRS SRS
             INNER JOIN MJEREZ.VALW_VERSION VER ON  VER.ID = SRS.VERSION_ID WHERE VER.VERSION = :version""", version=version).fetchone()
-
 
 def _insert_mensaje(connection, sql: str, id_gdb: int, mensaje: str, id_validador:int)->None:
     # TODO esto debería arrojar excepciones.
@@ -327,13 +171,10 @@ def _id_validador(connection, validador:str)->int:
     with connection.cursor() as cur:
         return cur.execute("""SELECT ID FROM MJEREZ.VALW_DOM_VALIDADORES 
             WHERE DESCRIPCION = :validador""", validador=validador).fetchone()[0]
-        
-
 
 def quantity_dataset(connection, id, gvds, gds) -> None:
     """
     Persiste la información de las diferencias o exactitudes de la validación referente a datasets.
-
     Args:
         connection: Conexión a la base de datos.
         id int: identificador de la gdba en la tabla VALW_GDBS_VALIDAR.
@@ -345,13 +186,14 @@ def quantity_dataset(connection, id, gvds, gds) -> None:
     """
     arcpy.AddMessage("6. Quantity of datasets...")
     arcpy.AddMessage("Verificación dataset")
+    
     count_errors= 0
     id_validador = _id_validador(connection, validador='DATASETS')
     sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
+
     for key_gvds in gvds.items():
         if key_gvds[0] in gds:
             mensaje = f'Dataset correcto -> {key_gvds[0]}'
-            
             _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
             arcpy.AddMessage(mensaje)
         else:
@@ -368,76 +210,76 @@ def quantity_dataset(connection, id, gvds, gds) -> None:
             _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
             arcpy.AddError(mensaje)
     
-    arcpy.AddMessage(F"Errores encontrados: {count_errors}")
+    arcpy.AddMessage(f"Errores encontrados: {count_errors}")
 
 def quantity_feature_class(connection, id, gvfc, gfc) -> None:
     """
     Persiste la información de las diferencias o exactitudes de la validación referente a feature classes.
-
     Args:
         connection: Conexión a la base de datos.
         id int: identificador de la gdba en la tabla VALW_GDBS_VALIDAR.
         gvsd str: datasets de la versión.
-        gvds Dict[str, List[str]]: Datasets de la versión
-        gds Dict[str, List[str]]: Datasets de la gdb a ser comprobada.
+        gvds Dict[str, List[str]]: Feature Classes de la versión
+        gds Dict[str, List[str]]: Feature Classes de la gdb a ser comprobada.
     Returns:
         None
     """
-    id_validador = _id_validador(connection=connection, validador='FEATURE CLASSES')
-    
-    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
     arcpy.AddMessage("7. Quantity of feature classes...")
     arcpy.AddMessage("Verificación feature class")
+    
     count_errors= 0
+    id_validador = _id_validador(connection=connection, validador='FEATURE CLASSES')
+    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
 
     for vfc in gvfc:
         if vfc in gfc:
             mensaje = f'Feature class correcto -> {vfc}'
-            arcpy.AddMessage(F"Feature class correcto -> {vfc}")
             _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
+            arcpy.AddMessage(mensaje)
         else:
             count_errors+= 1
             mensaje = f'Feature class del MDG faltante -> {vfc}'
-            arcpy.AddError(F"Feature class del MDG faltante -> {vfc}")
-            _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
-
+            with connection.cursor() as cur:
+                _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
+            arcpy.AddError(mensaje)
 
     for fc in gfc:
         if not fc in gvfc:
             count_errors+= 1
-            arcpy.AddError(F"Feature class no incluido en el MDG -> {fc}")
+            mensaje = f'Feature class no incluido en el MDG -> {fc}'
+            _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
+            arcpy.AddError(mensaje)
 
-    arcpy.AddMessage(F"Errores encontrados: {count_errors}")
+    arcpy.AddMessage(f"Errores encontrados: {count_errors}")
 
 def quantity_tables(connection, id, gvtbl, gtbl) -> None:
     """
     Persiste la información de las diferencias o exactitudes de la validación referente a tablas.
-
     Args:
         connection: Conexión a la base de datos.
         id int: identificador de la gdba en la tabla VALW_GDBS_VALIDAR.
         gvsd str: datasets de la versión.
-        gvds Dict[str, List[str]]: Datasets de la versión
-        gds Dict[str, List[str]]: Datasets de la gdb a ser comprobada.
+        gvtbl Dict[str, List[str]]: Tables de la versión
+        gtbl Dict[str, List[str]]: Tables de la gdb a ser comprobada.
     Returns:
         None
     """
     arcpy.AddMessage("8. Quantity of tables...")
     arcpy.AddMessage("Verificación tablas")
+
     count_errors= 0
     id_validador = _id_validador(connection=connection, validador='TABLAS')
-    
     sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
+
     for vtbl in gvtbl:
         if vtbl in gtbl:
             mensaje = f'Tabla o ficha correcta -> {vtbl}'
-            arcpy.AddMessage(F"Tabla o ficha correcta -> {vtbl}")
+            arcpy.AddMessage(f"Tabla o ficha correcta -> {vtbl}")
         else:
             count_errors+= 1
-            mensaje = f'Tabla o ficha correcta -> {vtbl}'
-            arcpy.AddError(F"Tabla o ficha del MDG faltante -> {vtbl}")
+            mensaje = f'Tabla o ficha del MDG faltante -> {vtbl}'
+            arcpy.AddError(mensaje)
         _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
-
 
     for tbl in gtbl:
         if tbl not in gvtbl:
@@ -446,6 +288,71 @@ def quantity_tables(connection, id, gvtbl, gtbl) -> None:
             _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
             arcpy.AddError(mensaje)
 
-    arcpy.AddMessage(F"Errores encontrados: {count_errors}")
+    arcpy.AddMessage(f"Errores encontrados: {count_errors}")
 
+def quantity_required(connection, id, gvreq, greq) -> None:
+    """
+    Persiste la información de las diferencias o exactitudes de la validación referente a requerimientos.
+
+    Args:
+        connection: Conexión a la base de datos.
+        id int: identificador de la gdba en la tabla VALW_GDBS_VALIDAR.
+        gvsd str: datasets de la versión.
+        gvreq Dict[str, List[str]]: Feature Classes obligatorios de la versión
+        greq Dict[str, List[str]]: Feature Classes obligatorios de la gdb a ser comprobada.
+    Returns:
+        None
+    """
+    arcpy.AddMessage("9. Quantity of required objects...")
+    arcpy.AddMessage("Verificación obligatoriedad objetos")
+
+    count_errors= 0
+    id_validador = _id_validador(connection=connection, validador='OBLIGATORIEDAD')
+    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
+
+    for vreq in gvreq:
+        if vreq in greq:
+            mensaje = f'Feature class cumple con la Tabla de Obligatoriedad -> {vreq}'
+            _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
+            arcpy.AddMessage(mensaje)
+        else:
+            count_errors+= 1
+            mensaje = f'Feature class obligatorio faltante según la Tabla de Obligatoriedad -> {vreq}'
+            with connection.cursor() as cur:
+                _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
+            arcpy.AddError(mensaje)
+
+    arcpy.AddMessage(f"Errores encontrados: {count_errors}")
+
+def feature_attributes(connection, id, gvreq, greq) -> None:
+    """
+    Persiste la información de las diferencias o exactitudes de la validación referente a requerimientos.
+
+    Args:
+        connection: Conexión a la base de datos.
+        id int: identificador de la gdba en la tabla VALW_GDBS_VALIDAR.
+        gvsd str: datasets de la versión.
+        gvreq Dict[str, List[str]]: Feature Classes obligatorios de la versión
+        greq Dict[str, List[str]]: Feature Classes obligatorios de la gdb a ser comprobada.
+    Returns:
+        None
+    """
+    arcpy.AddMessage("10. Feature attributes of the objects...")
+    arcpy.AddMessage("Verificación características atributivas de los objetos")
+
+    count_errors= 0
+    id_validador = _id_validador(connection=connection, validador='ATRIBUTOS')
+    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
+
+    #a GEOMETRIA -> OBJETOS_ATRIBUTOS
+    #b CHECK GEOMETRY -> GEOPROCESO
+    #c COD_ID_ATRIBUTO -> ATRIBUTO
+    #d COD_EXPEDIENTE -> ATRIBUTO
+    #e ATRIBUTOS OBLIGATORIOS -> OBJETOS_ATRIBUTOS
+    #f FIELD NAME -> OBJETOS_ATRIBUTOS
+    #g FIELD NAME ALIAS -> OBJETOS_ATRIBUTOS
+    #h FIELD TYPE -> OBJETOS_ATRIBUTOS
+    #i FIELD LENGTH -> OBJETOS_ATRIBUTOS
+    #j DOMAIN -> OBJETOS_ATRIBUTOS
+    #k VALIDATE DOMAIN -> OBJETOS_ATRIBUTOS
 

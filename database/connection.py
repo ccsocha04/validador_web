@@ -1,3 +1,4 @@
+import arcpy
 import os
 import cx_Oracle as cx
 
@@ -8,7 +9,7 @@ ip = os.getenv('IP')
 port = os.getenv('PORT')
 db = os.getenv('DB')
 
-print(f'user={user}')
+arcpy.AddMessage(f'0. Database connection user: {user}')
 dsn = f'{ip}:{port}/{db}'
 
 # TODO esto debe ser un pooling connection https://cx-oracle.readthedocs.io/en/latest/user_guide/connection_handling.html
