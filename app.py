@@ -1,11 +1,13 @@
+import pandas as pd
+from pathlib import Path
 from runpy import run_path
+
 from Validador.validator_web import (extract_files, get_feature_classes, get_feature_datasets, get_tables,  
                                     quantity_dataset, quantity_feature_class, 
                                     quantity_tables, reference_system, spatial_matching)
 from Validador.version_info import get_version_datasets, get_version_feature_classes, get_version_tables
-from utils.utils import set_workspace
-from pathlib import Path
-from database.connection import con, engine
+from utils.utils import valw_gdb_mensaje, set_workspace
+from database.connection import con, engine, schema
 from database.gdb_path_to_validate import por_validar, gdb_para_validar, update_estado, borrar_registros_mensajes
 
 
@@ -55,19 +57,28 @@ if __name__ == '__main__':
 
     # Validator 2 - Reference System
     version='1'
-    reference_system(version, engine, id_bd_gdb, version_ds, ds)
+    df_reference = reference_system(version, engine, id_bd_gdb, version_ds, ds)
 
     # Validator 3 - Quantity of datasets
-    quantity_dataset(engine, id_bd_gdb, version_ds, ds)
+    df_datasets = quantity_dataset(engine, id_bd_gdb, version_ds, ds)
 
     # Validator 4 - Quantity of feature classes
-    quantity_feature_class(engine, id_bd_gdb, version_fc, fc)
+    df_features = quantity_feature_class(engine, id_bd_gdb, version_fc, fc)
 
     # Validator 5 - Quantity of tables
-    quantity_tables(con, id_bd_gdb, version_tbl, tbl)
+    df_tables = quantity_tables(engine, id_bd_gdb, version_tbl, tbl)
 
     # Validator 6 - Required fields
     # Validator 7 - Attributive characteristics
     
     # TODO actualizar estado de la gdb
+    final = pd.concat([df_reference, df_datasets, df_features, df_tables])
+    final.to_sql(
+        name=valw_gdb_mensaje.table_name,
+        con=engine, 
+        schema=schema, 
+        if_exists='append', 
+        index=False, 
+        chunksize=1000
+    
     update_estado(con, id=id_bd_gdb, estado='Finalizado')

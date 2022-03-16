@@ -283,15 +283,13 @@ def left_join_ds_version_ds_validacion(
         right_on='DATASETS')
     
 def reference_system( 
-    version:str ,engine, id, ds_version: Dict[str, List[str]], ds_validacion: List[str]):
+    version:str ,engine, id, ds_version: Dict[str, List[str]], ds_validacion: List[str]) -> pd.DataFrame:
     """
     Reference System
 
     Args:
         gvds Dict[str, List[str]]: Datasets de la versión
         gds Dict[str, List[str]]: Datasets de la gdb a ser comprobada.
-    # TODO eliminar connection y usar solo engine.
-    # TODO hacer un setup de configs
     """
     id_validador = _id_validador(engine=engine, validador=valw_dom_validadores.srs)
     codigo, nombre = _get_srs(connection=engine, version=version)
@@ -324,19 +322,10 @@ def reference_system(
     final = pd.concat([srs_incorrecto, srs_correcto])
     final[valw_gdb_mensaje.gdb_id_column] = id
     final[valw_gdb_mensaje.validador_id] = id_validador
-    final = final[[
+    return  final[[
         valw_gdb_mensaje.gdb_id_column, 
         valw_gdb_mensaje.validador_id, 
-        valw_gdb_mensaje.mensaje_column]].copy()
-
-    final.to_sql(
-        name=valw_gdb_mensaje.table_name,
-        con=engine, 
-        schema=schema, 
-        if_exists='append', 
-        index=False, 
-        chunksize=1000
-    )    
+        valw_gdb_mensaje.mensaje_column]].copy()  
 
 def _get_srs(connection, version: str)-> Tuple[str, str]:
     """
@@ -379,7 +368,7 @@ def _id_validador(engine ,validador:str)->int:
         
 
 
-def quantity_dataset(engine, id, ds_version:pd.DataFrame, ds_validacion:pd.DataFrame) -> None:
+def quantity_dataset(engine, id, ds_version:pd.DataFrame, ds_validacion:pd.DataFrame) -> pd.DataFrame:
     """
     Persiste la información de las diferencias o exactitudes de la validación referente a datasets.
 
@@ -390,7 +379,7 @@ def quantity_dataset(engine, id, ds_version:pd.DataFrame, ds_validacion:pd.DataF
         gvds Dict[str, List[str]]: Datasets de la versión
         gds Dict[str, List[str]]: Datasets de la gdb a ser comprobada.
     Returns:
-        None
+        pd.DataFrame
     """
     arcpy.AddMessage("6. Quantity of datasets...")
     arcpy.AddMessage("Verificación dataset")
@@ -401,7 +390,7 @@ def quantity_dataset(engine, id, ds_version:pd.DataFrame, ds_validacion:pd.DataF
         ds_version=ds_version,
         ds_validacion=ds_validacion)
     version_vs_gdb = version_vs_gdb[['DS_NOMBRE', 'DATASETS']].copy()
-    
+
     ausentes = pd.DataFrame()
     # verificar si existen datasets ausentes.
     if version_vs_gdb.isna().sum().sum() > 0 :
@@ -447,20 +436,10 @@ def quantity_dataset(engine, id, ds_version:pd.DataFrame, ds_validacion:pd.DataF
         valw_gdb_mensaje.gdb_id_column,
         valw_gdb_mensaje.validador_id,
         valw_gdb_mensaje.mensaje_column]].copy()
-    final = pd.concat([final, ds_adicionales])
+    return pd.concat([final, ds_adicionales])
     
-    # TODO hacer de esto una funcion
-    final.to_sql(
-        name=valw_gdb_mensaje.table_name,
-        con=engine, 
-        schema=schema, 
-        if_exists='append', 
-        index=False, 
-        chunksize=1000
-    )
 
-
-def quantity_feature_class(engine, id, fc_version, fc_gdb) -> None:
+def quantity_feature_class(engine, id, fc_version, fc_gdb) -> pd.DataFrame:
     """
     Persiste la información de las diferencias o exactitudes de la validación referente a feature classes.
 
@@ -471,7 +450,7 @@ def quantity_feature_class(engine, id, fc_version, fc_gdb) -> None:
         gvds Dict[str, List[str]]: Datasets de la versión
         gds Dict[str, List[str]]: Datasets de la gdb a ser comprobada.
     Returns:
-        None
+        pd.DataFrame
     """
     id_validador = _id_validador(engine=engine, validador=valw_dom_validadores.features)
 
@@ -498,20 +477,12 @@ def quantity_feature_class(engine, id, fc_version, fc_gdb) -> None:
     final = pd.concat([ausentes_version_gdb, adicionales_gdb_version, correctos])
     final[valw_gdb_mensaje.gdb_id_column] = id
     final[valw_gdb_mensaje.validador_id] = id_validador
-    final = final[[
+    return final[[
         valw_gdb_mensaje.gdb_id_column,
         valw_gdb_mensaje.validador_id,
         valw_gdb_mensaje.mensaje_column]].copy()
-    final.to_sql(
-        name=valw_gdb_mensaje.table_name,
-        con=engine, 
-        schema=schema, 
-        if_exists='append', 
-        index=False, 
-        chunksize=1000
-    )
 
-def quantity_tables(connection, id, gvtbl, gtbl) -> None:
+def quantity_tables(engine, id, tbl_version, tbl_gdb) -> pd.DataFrame:
     """
     Persiste la información de las diferencias o exactitudes de la validación referente a tablas.
 
@@ -522,32 +493,39 @@ def quantity_tables(connection, id, gvtbl, gtbl) -> None:
         gvds Dict[str, List[str]]: Datasets de la versión
         gds Dict[str, List[str]]: Datasets de la gdb a ser comprobada.
     Returns:
-        None
+        pd.DataFrame
     """
     arcpy.AddMessage("8. Quantity of tables...")
     arcpy.AddMessage("Verificación tablas")
-    count_errors= 0
-    id_validador = _id_validador(connection=connection, validador='TABLAS')
+    id_validador = _id_validador(engine=engine, validador=valw_dom_validadores.tables)
+
+    ausentes_version_gdb = tbl_version.set_index('FICHAX').index.difference(tbl_gdb.set_index('TABLAS').index)
+    adicionales_gdb_version = tbl_gdb.set_index('TABLAS').index.difference(tbl_version.set_index('FICHAX').index)
+    correctos = tbl_version.set_index('FICHAX').index.intersection(tbl_gdb.set_index('TABLAS').index)
+
+    ausentes_version_gdb = ausentes_version_gdb.to_frame(index=False, name='TABLA')
+    adicionales_gdb_version = adicionales_gdb_version.to_frame(index=False, name='TABLA')
+    correctos = correctos.to_frame(index=False, name='TABLA')
+
+    if len(ausentes_version_gdb) > 0:
+        ausentes_version_gdb[valw_gdb_mensaje.mensaje_column] = ausentes_version_gdb['TABLA'].\
+            apply(lambda x: f'Tabla o ficha del MDG faltante -> {x}')
     
-    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
-    for vtbl in gvtbl:
-        if vtbl in gtbl:
-            mensaje = f'Tabla o ficha correcta -> {vtbl}'
-            arcpy.AddMessage(F"Tabla o ficha correcta -> {vtbl}")
-        else:
-            count_errors+= 1
-            mensaje = f'Tabla o ficha correcta -> {vtbl}'
-            arcpy.AddError(F"Tabla o ficha del MDG faltante -> {vtbl}")
-        _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
+    if len(adicionales_gdb_version) > 0:
+        adicionales_gdb_version[valw_gdb_mensaje.mensaje_column] = adicionales_gdb_version['TABLA'].\
+            apply(lambda x: f'Tabla o ficha no incluido en el MDG -> {x}')
+        
+    if len(correctos) > 0:
+        correctos[valw_gdb_mensaje.mensaje_column] = correctos['TABLA'].\
+            apply(lambda x: f'Tabla o ficha correcta -> {x}')
 
-
-    for tbl in gtbl:
-        if tbl not in gvtbl:
-            count_errors+= 1
-            mensaje = f'Tabla o ficha no incluido en el MDG -> {tbl}'
-            _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
-            arcpy.AddError(mensaje)
-
-    arcpy.AddMessage(F"Errores encontrados: {count_errors}")
+    final = pd.concat([ausentes_version_gdb, adicionales_gdb_version, correctos])
+    final[valw_gdb_mensaje.gdb_id_column] = id
+    final[valw_gdb_mensaje.validador_id] = id_validador
+    return final[[
+        valw_gdb_mensaje.gdb_id_column,
+        valw_gdb_mensaje.validador_id,
+        valw_gdb_mensaje.mensaje_column]].copy()
+    
 
 

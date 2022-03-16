@@ -43,6 +43,7 @@ class ValwDomValidadores(BaseModel):
     srs: str = 'SISTEMA DE REFERENCIA'
     datasets: str = 'DATASETS'
     features: str = 'FEATURE CLASSES'
+    tables: str = 'TABLAS'
 
 class ValwSRS(BaseModel):
     table_name: str = 'VALW_SRS'
