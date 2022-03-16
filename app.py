@@ -16,7 +16,12 @@ if __name__ == '__main__':
 
     #if cantidad > 0:
     #path = r'E:\VWMDG\validador_web\Data\IDO-08061_202203071.gdb'
-    path = r'E:\VWMDG\validador_web\Data\IDO-08061_20220303.gdb'
+    path = r'C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data\IDO-08061_202203071.gdb'
+    
+    expediente = 'IDO-08061'
+    documento_tecnico = 'Formato Básico Minero - FBM'
+    # etapa = 'Construcción y montaje'
+    etapa = 'Exploración'
     id_bd_gdb, ruta_gdb = gdb_para_validar(engine, gdb=path)
     # TODO UPDATE INICIO_VALIDACION
     update_estado(con, id=id_bd_gdb, estado='En proceso')
