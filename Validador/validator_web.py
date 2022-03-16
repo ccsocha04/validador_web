@@ -282,7 +282,7 @@ def left_join_ds_version_ds_validacion(
         left_on='DS_NOMBRE', 
         right_on='DATASETS')
     
-def reference_system(connection, 
+def reference_system( 
     version:str ,engine, id, ds_version: Dict[str, List[str]], ds_validacion: List[str]):
     """
     Reference System
@@ -401,7 +401,8 @@ def quantity_dataset(engine, id, ds_version:pd.DataFrame, ds_validacion:pd.DataF
         ds_version=ds_version,
         ds_validacion=ds_validacion)
     version_vs_gdb = version_vs_gdb[['DS_NOMBRE', 'DATASETS']].copy()
-
+    
+    ausentes = pd.DataFrame()
     # verificar si existen datasets ausentes.
     if version_vs_gdb.isna().sum().sum() > 0 :
         ausentes = version_vs_gdb[
@@ -459,9 +460,7 @@ def quantity_dataset(engine, id, ds_version:pd.DataFrame, ds_validacion:pd.DataF
     )
 
 
-    print('stop')
-
-def quantity_feature_class(connection, id, gvfc, gfc) -> None:
+def quantity_feature_class(engine, id, fc_version, fc_gdb) -> None:
     """
     Persiste la información de las diferencias o exactitudes de la validación referente a feature classes.
 
@@ -474,31 +473,43 @@ def quantity_feature_class(connection, id, gvfc, gfc) -> None:
     Returns:
         None
     """
-    id_validador = _id_validador(connection=connection, validador='FEATURE CLASSES')
+    id_validador = _id_validador(engine=engine, validador=valw_dom_validadores.features)
+
+    ausentes_version_gdb = fc_version.set_index('NOMBRE_OBJETO').index.difference(fc_gdb.set_index('FEATURES').index)
+    adicionales_gdb_version = fc_gdb.set_index('FEATURES').index.difference(fc_version.set_index('NOMBRE_OBJETO').index)
+    correctos = fc_version.set_index('NOMBRE_OBJETO').index.intersection(fc_gdb.set_index('FEATURES').index)
+
+    ausentes_version_gdb = ausentes_version_gdb.to_frame(index=False, name='FEATURE')
+    adicionales_gdb_version = adicionales_gdb_version.to_frame(index=False, name='FEATURE')
+    correctos = correctos.to_frame(index=False, name='FEATURE')
+
+    if len(ausentes_version_gdb) > 0:
+        ausentes_version_gdb[valw_gdb_mensaje.mensaje_column] = ausentes_version_gdb['FEATURE'].\
+            apply(lambda x: f'Feature class del MDG faltante -> {x}')
     
-    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
-    arcpy.AddMessage("7. Quantity of feature classes...")
-    arcpy.AddMessage("Verificación feature class")
-    count_errors= 0
+    if len(adicionales_gdb_version) > 0:
+        adicionales_gdb_version[valw_gdb_mensaje.mensaje_column] = adicionales_gdb_version['FEATURE'].\
+            apply(lambda x: f'Feature class no incluido en el MDG -> {x}')
+        
+    if len(correctos) > 0:
+        correctos[valw_gdb_mensaje.mensaje_column] = correctos['FEATURE'].\
+            apply(lambda x: f'Feature class correcto -> {x}')
 
-    for vfc in gvfc:
-        if vfc in gfc:
-            mensaje = f'Feature class correcto -> {vfc}'
-            arcpy.AddMessage(F"Feature class correcto -> {vfc}")
-            _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
-        else:
-            count_errors+= 1
-            mensaje = f'Feature class del MDG faltante -> {vfc}'
-            arcpy.AddError(F"Feature class del MDG faltante -> {vfc}")
-            _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
-
-
-    for fc in gfc:
-        if not fc in gvfc:
-            count_errors+= 1
-            arcpy.AddError(F"Feature class no incluido en el MDG -> {fc}")
-
-    arcpy.AddMessage(F"Errores encontrados: {count_errors}")
+    final = pd.concat([ausentes_version_gdb, adicionales_gdb_version, correctos])
+    final[valw_gdb_mensaje.gdb_id_column] = id
+    final[valw_gdb_mensaje.validador_id] = id_validador
+    final = final[[
+        valw_gdb_mensaje.gdb_id_column,
+        valw_gdb_mensaje.validador_id,
+        valw_gdb_mensaje.mensaje_column]].copy()
+    final.to_sql(
+        name=valw_gdb_mensaje.table_name,
+        con=engine, 
+        schema=schema, 
+        if_exists='append', 
+        index=False, 
+        chunksize=1000
+    )
 
 def quantity_tables(connection, id, gvtbl, gtbl) -> None:
     """

@@ -13,9 +13,10 @@ if __name__ == '__main__':
     # cantidad = por_validar(con)
 
     #if cantidad > 0:
-    path = r'E:\VWMDG\validador_web\Data\IDO-08061_202203071.gdb'
+    # path = r'E:\VWMDG\validador_web\Data\IDO-08061_202203071.gdb'
+    path = r'E:\VWMDG\validador_web\Data\IDO-08061_20220303.gdb'
     id_bd_gdb, ruta_gdb = gdb_para_validar(engine, gdb=path)
-    
+    # TODO UPDATE INICIO_VALIDACION
     update_estado(con, id=id_bd_gdb, estado='En proceso')
     borrar_registros_mensajes(con, id=id_bd_gdb)
 
@@ -54,19 +55,19 @@ if __name__ == '__main__':
 
     # Validator 2 - Reference System
     version='1'
-    reference_system(con, version, engine, id_bd_gdb, version_ds, ds)
+    reference_system(version, engine, id_bd_gdb, version_ds, ds)
 
     # Validator 3 - Quantity of datasets
     quantity_dataset(engine, id_bd_gdb, version_ds, ds)
 
     # Validator 4 - Quantity of feature classes
-    quantity_feature_class(con, id_bd_gdb, version_fc, fc)
+    quantity_feature_class(engine, id_bd_gdb, version_fc, fc)
 
     # Validator 5 - Quantity of tables
     quantity_tables(con, id_bd_gdb, version_tbl, tbl)
 
     # Validator 6 - Required fields
     # Validator 7 - Attributive characteristics
+    
     # TODO actualizar estado de la gdb
-
     update_estado(con, id=id_bd_gdb, estado='Finalizado')
