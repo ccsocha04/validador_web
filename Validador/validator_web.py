@@ -382,6 +382,60 @@ def quantity_tables(engine, id, tbl_version, tbl_gdb) -> pd.DataFrame:
         valw_gdb_mensaje.bool_column]].copy()
     
 
+def quantity_required(connection, id, gvreq, greq) -> None:
+    """
+    Persiste la información de las diferencias o exactitudes de la validación referente a requerimientos.
+
+    Args:
+        connection: Conexión a la base de datos.
+        id int: identificador de la gdba en la tabla VALW_GDBS_VALIDAR.
+        gvsd str: datasets de la versión.
+        gvreq Dict[str, List[str]]: Feature Classes obligatorios de la versión
+        greq Dict[str, List[str]]: Feature Classes obligatorios de la gdb a ser comprobada.
+    Returns:
+        None
+    """
+    arcpy.AddMessage("9. Quantity of required objects...")
+    arcpy.AddMessage("Verificación obligatoriedad objetos")
+
+    count_errors= 0
+    id_validador = _id_validador(connection=connection, validador='OBLIGATORIEDAD')
+    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
+
+    for vreq in gvreq:
+        if vreq in greq:
+            mensaje = f'Feature class cumple con la Tabla de Obligatoriedad -> {vreq}'
+            _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
+            arcpy.AddMessage(mensaje)
+        else:
+            count_errors+= 1
+            mensaje = f'Feature class obligatorio faltante según la Tabla de Obligatoriedad -> {vreq}'
+            with connection.cursor() as cur:
+                _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
+            arcpy.AddError(mensaje)
+
+    arcpy.AddMessage(f"Errores encontrados: {count_errors}")
+
+def feature_attributes(connection, id, gvreq, greq) -> None:
+    """
+    Persiste la información de las diferencias o exactitudes de la validación referente a requerimientos.
+
+    Args:
+        connection: Conexión a la base de datos.
+        id int: identificador de la gdba en la tabla VALW_GDBS_VALIDAR.
+        gvsd str: datasets de la versión.
+        gvreq Dict[str, List[str]]: Feature Classes obligatorios de la versión
+        greq Dict[str, List[str]]: Feature Classes obligatorios de la gdb a ser comprobada.
+    Returns:
+        None
+    """
+    arcpy.AddMessage("10. Feature attributes of the objects...")
+    arcpy.AddMessage("Verificación características atributivas de los objetos")
+
+    count_errors= 0
+    id_validador = _id_validador(connection=connection, validador='ATRIBUTOS')
+    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
+
     #a GEOMETRIA -> OBJETOS_ATRIBUTOS
     #b CHECK GEOMETRY -> GEOPROCESO
     #c COD_ID_ATRIBUTO -> ATRIBUTO

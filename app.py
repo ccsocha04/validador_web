@@ -4,8 +4,10 @@ from runpy import run_path
 
 from Validador.validator_web import (extract_files, get_feature_classes, get_feature_datasets, get_tables,  
                                     quantity_dataset, quantity_feature_class, 
-                                    quantity_tables, reference_system, spatial_matching)
-from Validador.version_info import get_version_datasets, get_version_feature_classes, get_version_tables
+                                    quantity_tables, reference_system, spatial_matching, 
+                                    quantity_required, feature_attributes)
+from Validador.version_info import (get_version_datasets, get_version_feature_classes, get_version_tables,
+                                    get_version_required, get_version_attributes)
 from utils.utils import valw_gdb_mensaje, set_workspace
 from database.connection import con, engine, schema
 from database.gdb_path_to_validate import por_validar, gdb_para_validar, update_estado, borrar_registros_mensajes
@@ -22,6 +24,7 @@ if __name__ == '__main__':
     documento_tecnico = 'Formato Básico Minero - FBM'
     # etapa = 'Construcción y montaje'
     etapa = 'Exploración'
+    version='1'
     id_bd_gdb, ruta_gdb = gdb_para_validar(engine, gdb=path)
     # TODO UPDATE INICIO_VALIDACION
     update_estado(con, id=id_bd_gdb, estado='En proceso')
@@ -35,6 +38,10 @@ if __name__ == '__main__':
     version_fc = get_version_feature_classes(engine)
     # Tables
     version_tbl = get_version_tables(engine)
+    # Required objects
+    version_req = get_version_required(con, documento_tecnico, etapa)
+    # Features attributes
+    # version_att = get_version_attributes(con)
     
     # file_path = str(current_path.parent.absolute().joinpath(data_folder).joinpath(zip_file))
     # TODO esto debe ser leido de la base de datos
@@ -60,7 +67,7 @@ if __name__ == '__main__':
     spatial_matching(con, id_bd_gdb, expediente)
 
     # Validator 2 - Reference System
-    version='1'
+    
     df_reference = reference_system(version, engine, id_bd_gdb, version_ds, ds)
 
     # Validator 3 - Quantity of datasets
@@ -72,8 +79,11 @@ if __name__ == '__main__':
     # Validator 5 - Quantity of tables
     df_tables = quantity_tables(engine, id_bd_gdb, version_tbl, tbl)
 
-    # Validator 6 - Required fields
-    # Validator 7 - Attributive characteristics
+    # Validator 6 - Required
+    quantity_required(con, id_bd_gdb, version_req, fc)
+
+    # Validator 7 - Attributive
+    # feature_attributes(con, id_bd_gdb, version_fc, fc)
     
     # TODO actualizar estado de la gdb
     final = pd.concat([df_reference, df_datasets, df_features, df_tables])
