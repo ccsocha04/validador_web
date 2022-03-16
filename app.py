@@ -1,15 +1,13 @@
+import pandas as pd
+from pathlib import Path
 from runpy import run_path
 
-from attr import attributes
 from Validador.validator_web import (extract_files, get_feature_classes, get_feature_datasets, get_tables,  
                                     quantity_dataset, quantity_feature_class, 
-                                    quantity_tables, reference_system, spatial_matching, 
-                                    quantity_required, feature_attributes)
-from Validador.version_info import (get_version_datasets, get_version_feature_classes, get_version_tables, 
-                                    get_version_required, get_version_attributes)
-from utils.utils import set_workspace
-from pathlib import Path
-from database.connection import con
+                                    quantity_tables, reference_system, spatial_matching)
+from Validador.version_info import get_version_datasets, get_version_feature_classes, get_version_tables
+from utils.utils import valw_gdb_mensaje, set_workspace
+from database.connection import con, engine, schema
 from database.gdb_path_to_validate import por_validar, gdb_para_validar, update_estado, borrar_registros_mensajes
 
 
@@ -17,32 +15,21 @@ if __name__ == '__main__':
     # cantidad = por_validar(con)
 
     #if cantidad > 0:
-    path = r'C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data\IDO-08061_202203071.gdb'
-    
-    expediente = 'IDO-08061'
-    documento_tecnico = 'Formato Básico Minero - FBM'
-    # etapa = 'Construcción y montaje'
-    etapa = 'Exploración'
-
-    id_bd_gdb, ruta_gdb = gdb_para_validar(con, gdb=path)
-    
+    #path = r'E:\VWMDG\validador_web\Data\IDO-08061_202203071.gdb'
+    path = r'E:\VWMDG\validador_web\Data\IDO-08061_20220303.gdb'
+    id_bd_gdb, ruta_gdb = gdb_para_validar(engine, gdb=path)
+    # TODO UPDATE INICIO_VALIDACION
     update_estado(con, id=id_bd_gdb, estado='En proceso')
     borrar_registros_mensajes(con, id=id_bd_gdb)
 
     # Get version GDB
     
     # Feature Datasets
-    version_ds = get_version_datasets(con)
+    version_ds = get_version_datasets(engine)
     # Feature Classes
-    version_fc = get_version_feature_classes(con)
+    version_fc = get_version_feature_classes(engine)
     # Tables
-    version_tbl = get_version_tables(con)
-    # Required objects
-    version_req = get_version_required(con, documento_tecnico, etapa)
-    # Features attributes
-    # version_att = get_version_attributes(con)
-
-    # print(version_att)
+    version_tbl = get_version_tables(engine)
     
     # file_path = str(current_path.parent.absolute().joinpath(data_folder).joinpath(zip_file))
     # TODO esto debe ser leido de la base de datos
@@ -68,23 +55,29 @@ if __name__ == '__main__':
     spatial_matching(con, id_bd_gdb, expediente)
 
     # Validator 2 - Reference System
-    reference_system(con, id_bd_gdb, version_ds, ds)
+    version='1'
+    df_reference = reference_system(version, engine, id_bd_gdb, version_ds, ds)
 
     # Validator 3 - Quantity of datasets
-    quantity_dataset(con, id_bd_gdb, version_ds, ds)
+    df_datasets = quantity_dataset(engine, id_bd_gdb, version_ds, ds)
 
     # Validator 4 - Quantity of feature classes
-    quantity_feature_class(con, id_bd_gdb, version_fc, fc)
+    df_features = quantity_feature_class(engine, id_bd_gdb, version_fc, fc)
 
     # Validator 5 - Quantity of tables
-    quantity_tables(con, id_bd_gdb, version_tbl, tbl)
+    df_tables = quantity_tables(engine, id_bd_gdb, version_tbl, tbl)
 
-    # Validator 6 - Required
-    quantity_required(con, id_bd_gdb, version_req, fc)
-
-    # Validator 7 - Attributive
-    # feature_attributes(con, id_bd_gdb, version_fc, fc)
-
+    # Validator 6 - Required fields
+    # Validator 7 - Attributive characteristics
+    
     # TODO actualizar estado de la gdb
-
+    final = pd.concat([df_reference, df_datasets, df_features, df_tables])
+    final.to_sql(
+        name=valw_gdb_mensaje.table_name,
+        con=engine, 
+        schema=schema, 
+        if_exists='append', 
+        index=False, 
+        chunksize=1000)
+    
     update_estado(con, id=id_bd_gdb, estado='Finalizado')
