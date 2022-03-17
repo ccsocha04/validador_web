@@ -9,6 +9,8 @@ import requests
 from importlib.resources import path
 from typing import List, Dict, Tuple
 from zipfile import ZipFile
+
+from sqlalchemy import desc
 from utils.utils import (conversion_format, set_workspace, valw_gdb_mensaje, 
     valw_dom_validadores, valw_srs, valw_version)
 from database.connection import pd_upper_columns, schema
@@ -57,7 +59,8 @@ def spatial_matching(connection, id, exp) -> None:
     arcpy.AddMessage("Verificación coincidencia espacial")
 
     id_validador = _id_validador(connection, validador='ESPACIAL')
-    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
+    id_validador = int(id_validador)
+    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID, ESTA_BIEN) VALUES (:id_db, :mensaje, :id_validador, :bool_column)"""
     
     url_service_anm = f"https://geo.anm.gov.co/webgis/services/ANM/ServiciosANM/MapServer/WFSServer?service=WFS&version=2.0.0&request=GetFeature&typeName=Titulo_Vigente&PropertyName=CODIGO_EXPEDIENTE,FECHA_DE_INSCRIPCION,ESTADO,MODALIDAD,ETAPA,NOMBRE_DE_TITULAR,Shape&Filter=<ogc:Filter><ogc:PropertyIsEqualTo><ogc:PropertyName>CODIGO_EXPEDIENTE</ogc:PropertyName><ogc:Literal>{exp}</ogc:Literal></ogc:PropertyIsEqualTo></ogc:Filter>&outputformat=ESRIGEOJSON"
     geojson_service_anm = requests.get(url_service_anm).json()
@@ -67,14 +70,14 @@ def spatial_matching(connection, id, exp) -> None:
     select_location = arcpy.SelectLayerByLocation_management(delimit_proyect_pg, "ARE_IDENTICAL_TO", mining_title, None, "NEW_SELECTION", "NOT_INVERT")
 
     if int(arcpy.GetCount_management(select_location)[0]) > 0:
+        bool_column = 1
         mensaje = f'La delimitación del título minero coincide con el polígono estructurado en AnnA Minería -> DELIMIT_PROYEC_PG'
-        _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
-        arcpy.AddMessage(mensaje)
+        _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador, bool_column=bool_column)
 
     else:
+        bool_column = 0
         mensaje = f'La delimitación del título minero no coincide con el polígono estructurado en AnnA Minería -> DELIMIT_PROYEC_PG'
-        _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
-        arcpy.AddError(mensaje)
+        _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador, bool_column=bool_column)
 
 def get_feature_datasets():
     """
@@ -115,6 +118,45 @@ def get_tables():
     
     return pd.DataFrame({'TABLAS': tables})
 
+def get_feature_attributes(vfc_df: pd.DataFrame, fc_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Get all features attributes
+    """
+    vfc_list = set(vfc_df['NOMBRE_OBJETO'].tolist())
+    fc_list = set(fc_df['FEATURES'].tolist())
+    fc_to_check = vfc_list.intersection(fc_list)
+    fc_names = ['NOMBRE', 'ALIAS', 'TIPO_GEOMETRIA', 'TIPO_FEATURE','NOMBRE_ATRIBUTO', 'ALIAS_ATRIBUTO', 'TIPO_ATRIBUTO', 'TAMANO_ATRIBUTO', 'DOMINIO', 'OBLIGACION']
+    df = pd.DataFrame(columns=[fc_names[0], fc_names[1], fc_names[2], fc_names[3], fc_names[4], fc_names[5], fc_names[6], fc_names[7], fc_names[8], fc_names[9]])
+    
+    for fc in fc_to_check:
+        descripcion_fc = arcpy.Describe(fc)
+        fields = arcpy.ListFields(fc)
+        fields_no_list = ['OBJECTID', 'SHAPE', 'SHAPE_Length', 'SHAPE_Area']
+        for field in fields:
+            if field.name not in fields_no_list:
+                if field.domain is '':
+                    domain = 'N/A'
+                else:
+                    domain = field.domain
+                union_df = pd.DataFrame([[descripcion_fc.name, descripcion_fc.aliasName,
+                descripcion_fc.shapeType, descripcion_fc.featureType, 
+                field.name, field.aliasName, field.type, field.length, domain, field.required]], columns=df.columns)
+                df = pd.concat([df, union_df], axis=0, ignore_index=True)
+
+    return df
+
+    #a GEOMETRIA -> OBJETOS_ATRIBUTOS OK 
+    #b CHECK GEOMETRY -> GEOPROCESO OK
+    #c COD_ID_ATRIBUTO -> ATRIBUTO
+    #d COD_EXPEDIENTE -> ATRIBUTO
+    #e ATRIBUTOS OBLIGATORIOS -> OBJETOS_ATRIBUTOS OK
+    #f FIELD NAME -> OBJETOS_ATRIBUTOS OK
+    #g FIELD NAME ALIAS -> OBJETOS_ATRIBUTOS OK
+    #h FIELD TYPE -> OBJETOS_ATRIBUTOS OK 
+    #i FIELD LENGTH -> OBJETOS_ATRIBUTOS OK
+    #j DOMAIN -> OBJETOS_ATRIBUTOS OK
+    #k VALIDATE DOMAIN -> OBJETOS_ATRIBUTOS
+
 def left_join_ds_version_ds_validacion(
     ds_version: pd.DataFrame,
     ds_validacion: pd.DataFrame
@@ -133,6 +175,9 @@ def reference_system(
         gvds Dict[str, List[str]]: Datasets de la versión
         gds Dict[str, List[str]]: Datasets de la gdb a ser comprobada.
     """
+    arcpy.AddMessage("5. Reference system...")
+    arcpy.AddMessage("Verificación sistema de referencia")
+
     id_validador = _id_validador(engine=engine, validador=valw_dom_validadores.srs)
     codigo, nombre = _get_srs(connection=engine, version=version)
     # TODO cuidado con esto
@@ -149,7 +194,7 @@ def reference_system(
         ].copy()
     if len(srs_incorrecto)>0:
         srs_incorrecto[valw_gdb_mensaje.mensaje_column] = srs_incorrecto.apply(lambda x: 
-            f'Sistema de referencia, incorrecto el sistema debe ser {x["DS_NOMBRE"]} -> {x["SRSCODE"]}', axis=1)
+            f'Sistema de referencia, incorrecto el sistema debe ser GCS MAGNA (EPSG: {x["SRSCODE"]}) -> {x["DS_NOMBRE"]}', axis=1)
         srs_incorrecto[valw_gdb_mensaje.bool_column] = 0
 
     # verificar sistemas de referencia correcto
@@ -160,7 +205,7 @@ def reference_system(
         ].copy()
     if len(srs_correcto)>0:
         srs_correcto[valw_gdb_mensaje.mensaje_column] = srs_correcto.apply(lambda x: 
-            f'Sistema de referencia correcto {x["DS_NOMBRE"]} -> {x["SRSCODE"]}', axis=1)
+            f'Sistema de referencia correcto GCS MAGNA (EPSG: {x["SRSCODE"]}) -> {x["DS_NOMBRE"]}', axis=1)
         srs_correcto[valw_gdb_mensaje.bool_column] = 1
 
     final = pd.concat([srs_incorrecto, srs_correcto])
@@ -191,10 +236,10 @@ def _get_srs(connection, version: str)-> Tuple[str, str]:
 
     return srs_code, nombre
 
-def _insert_mensaje(connection, sql: str, id_gdb: int, mensaje: str, id_validador:int)->None:
+def _insert_mensaje(connection, sql: str, id_gdb: int, mensaje: str, id_validador:int, bool_column:int)->None:
     # TODO esto debería arrojar excepciones.
     with connection.cursor() as cur:
-        cur.execute(sql, [id_gdb, mensaje, id_validador])
+        cur.execute(sql, [id_gdb, mensaje, id_validador, bool_column])
 
 def _id_validador(engine ,validador:str)->int:
     """
@@ -209,8 +254,6 @@ def _id_validador(engine ,validador:str)->int:
             FROM {schema}.{valw_dom_validadores.table_name}"""
     df = pd_upper_columns(sql, engine)
     return df[(df[valw_dom_validadores.descripcion] == validador)].reset_index()['ID'][0]
-        
-
 
 def quantity_dataset(engine, id, ds_version:pd.DataFrame, ds_validacion:pd.DataFrame) -> pd.DataFrame:
     """
@@ -225,7 +268,7 @@ def quantity_dataset(engine, id, ds_version:pd.DataFrame, ds_validacion:pd.DataF
         pd.DataFrame
     """
     arcpy.AddMessage("6. Quantity of datasets...")
-    arcpy.AddMessage("Verificación dataset")
+    arcpy.AddMessage("Verificación datasets")
     
     id_validador = _id_validador(engine, validador=valw_dom_validadores.datasets)
     
@@ -299,6 +342,9 @@ def quantity_feature_class(engine, id, fc_version, fc_gdb) -> pd.DataFrame:
     Returns:
         pd.DataFrame
     """
+    arcpy.AddMessage("7. Quantity of feature classes...")
+    arcpy.AddMessage("Verificación feature classes")
+
     id_validador = _id_validador(engine=engine, validador=valw_dom_validadores.features)
 
     ausentes_version_gdb = fc_version.set_index('NOMBRE_OBJETO').index.difference(fc_gdb.set_index('FEATURES').index)
@@ -347,6 +393,7 @@ def quantity_tables(engine, id, tbl_version, tbl_gdb) -> pd.DataFrame:
     """
     arcpy.AddMessage("8. Quantity of tables...")
     arcpy.AddMessage("Verificación tablas")
+
     id_validador = _id_validador(engine=engine, validador=valw_dom_validadores.tables)
 
     ausentes_version_gdb = tbl_version.set_index('FICHAX').index.difference(tbl_gdb.set_index('TABLAS').index)
@@ -395,28 +442,26 @@ def quantity_required(connection, id, gvreq, greq) -> None:
     Returns:
         None
     """
+
     arcpy.AddMessage("9. Quantity of required objects...")
     arcpy.AddMessage("Verificación obligatoriedad objetos")
 
-    count_errors= 0
-    id_validador = _id_validador(connection=connection, validador='OBLIGATORIEDAD')
-    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
+    id_validador = _id_validador(connection, validador='OBLIGATORIEDAD')
+    id_validador = int(id_validador)
+    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID, ESTA_BIEN) VALUES (:id_db, :mensaje, :id_validador, :bool_column)"""
 
     for vreq in gvreq:
-        if vreq in greq:
+        if vreq in greq['FEATURES'].to_list():
+            bool_column = 1
             mensaje = f'Feature class cumple con la Tabla de Obligatoriedad -> {vreq}'
-            _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
-            arcpy.AddMessage(mensaje)
+            _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador, bool_column=bool_column)
         else:
-            count_errors+= 1
+            bool_column = 0
             mensaje = f'Feature class obligatorio faltante según la Tabla de Obligatoriedad -> {vreq}'
             with connection.cursor() as cur:
-                _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador)
-            arcpy.AddError(mensaje)
+                _insert_mensaje(connection=connection, sql=sql, id_gdb= id, mensaje=mensaje, id_validador=id_validador, bool_column=bool_column)
 
-    arcpy.AddMessage(f"Errores encontrados: {count_errors}")
-
-def feature_attributes(connection, id, gvreq, greq) -> None:
+def feature_attributes(engine, id, attribute_version, attribute_gdb) -> pd.DataFrame:
     """
     Persiste la información de las diferencias o exactitudes de la validación referente a requerimientos.
 
@@ -429,15 +474,65 @@ def feature_attributes(connection, id, gvreq, greq) -> None:
     Returns:
         None
     """
+
     arcpy.AddMessage("10. Feature attributes of the objects...")
     arcpy.AddMessage("Verificación características atributivas de los objetos")
 
-    count_errors= 0
-    id_validador = _id_validador(connection=connection, validador='ATRIBUTOS')
-    sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID) VALUES (:id_db, :mensaje, :id_validador)"""
+    id_validador = _id_validador(engine, validador=valw_dom_validadores.attibutes)
 
-    #a GEOMETRIA -> OBJETOS_ATRIBUTOS
-    #b CHECK GEOMETRY -> GEOPROCESO
+    df_version_geometry = attribute_version[['NOMBRE','GEOMETRIA']].copy()
+    df_version_geometry = (df_version_geometry.sort_values(by='NOMBRE')).drop_duplicates()
+    df_gdb_geometry = attribute_gdb[['NOMBRE','TIPO_GEOMETRIA']].copy()
+    df_gdb_geometry = (df_gdb_geometry.sort_values(by='NOMBRE')).drop_duplicates()
+    df_geometry = df_version_geometry.merge(df_gdb_geometry, how='left', left_on='NOMBRE', right_on='NOMBRE')
+
+    # Validator Geometry 7.A
+    df_validate_geometry = df_geometry[df_geometry['GEOMETRIA'] != df_geometry['TIPO_GEOMETRIA']]['NOMBRE'].unique()
+    df_validate_geometry = pd.DataFrame(df_validate_geometry, columns=['FEATURE'])
+
+    if len(df_validate_geometry) > 0:
+        df_validate_geometry[valw_gdb_mensaje.mensaje_column] = df_validate_geometry['FEATURE'].\
+            apply(lambda x: f'Error tipo de geometría -> {x}')
+        df_validate_geometry[valw_gdb_mensaje.bool_column] = 0
+    
+    # print(df_validate_geometry)
+
+    df_version_topology = attribute_version[['NOMBRE']].copy()
+    df_version_topology = (df_version_topology.sort_values(by='NOMBRE')).drop_duplicates()
+    df_gdb_topology = attribute_gdb[['NOMBRE','TIPO_FEATURE']].copy()
+    df_gdb_topology = (df_gdb_topology.sort_values(by='NOMBRE')).drop_duplicates()
+    df_topology = df_version_topology.merge(df_gdb_topology, how='left', left_on='NOMBRE', right_on='NOMBRE')
+
+    # Validator Geometry 7.B
+    df_validate_topology = df_topology[df_topology['TIPO_FEATURE'] != 'Simple']['NOMBRE'].unique()
+    df_validate_topology = pd.DataFrame(df_validate_topology, columns=['FEATURE'])
+
+    if len(df_validate_topology) > 0:
+        df_validate_topology[valw_gdb_mensaje.mensaje_column] = df_validate_topology['FEATURE'].\
+            apply(lambda x: f'Error topólogico -> {x}')
+        df_validate_topology[valw_gdb_mensaje.bool_column] = 0
+
+    # print(df_validate_topology)
+
+    df_version_attributes = attribute_version[['NOMBRE','NOMBRE_ATRIBUTO']].sort_values(by='NOMBRE')
+    df_gdb_attributes = attribute_version[['NOMBRE','NOMBRE_ATRIBUTO']].sort_values(by='NOMBRE')
+    df_attributes = df_version_attributes.merge(df_gdb_attributes, how='left', left_on='NOMBRE', right_on='NOMBRE')
+
+    # print(df_version_attributes.head(15))
+    # print(df_gdb_attributes.head(15))
+
+    final = pd.concat([df_validate_geometry, df_validate_topology])
+    final[valw_gdb_mensaje.gdb_id_column] = id
+    final[valw_gdb_mensaje.validador_id] = id_validador
+    return final[[
+        valw_gdb_mensaje.gdb_id_column,
+        valw_gdb_mensaje.validador_id,
+        valw_gdb_mensaje.mensaje_column,
+        valw_gdb_mensaje.bool_column]].copy()
+    
+
+    #a GEOMETRIA -> OBJETOS_ATRIBUTOS OK
+    #b CHECK GEOMETRY -> GEOPROCESO OK
     #c COD_ID_ATRIBUTO -> ATRIBUTO
     #d COD_EXPEDIENTE -> ATRIBUTO
     #e ATRIBUTOS OBLIGATORIOS -> OBJETOS_ATRIBUTOS

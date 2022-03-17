@@ -45,6 +45,7 @@ class ValwDomValidadores(BaseModel):
     datasets: str = 'DATASETS'
     features: str = 'FEATURE CLASSES'
     tables: str = 'TABLAS'
+    attibutes: str = 'ATRIBUTOS'
 
 class ValwSRS(BaseModel):
     table_name: str = 'VALW_SRS'

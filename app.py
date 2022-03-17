@@ -2,7 +2,7 @@ import pandas as pd
 from pathlib import Path
 from runpy import run_path
 
-from Validador.validator_web import (extract_files, get_feature_classes, get_feature_datasets, get_tables,  
+from Validador.validator_web import (extract_files, get_feature_classes, get_feature_datasets, get_tables, get_feature_attributes, 
                                     quantity_dataset, quantity_feature_class, 
                                     quantity_tables, reference_system, spatial_matching, 
                                     quantity_required, feature_attributes)
@@ -30,18 +30,18 @@ if __name__ == '__main__':
     update_estado(con, id=id_bd_gdb, estado='En proceso')
     borrar_registros_mensajes(con, id=id_bd_gdb)
 
-    # Get version GDB
-    
-    # Feature Datasets
+
+    # Get version Feature Datasets
     version_ds = get_version_datasets(engine)
-    # Feature Classes
+    # Get version Feature Classes
     version_fc = get_version_feature_classes(engine)
-    # Tables
+    # Get version Tables
     version_tbl = get_version_tables(engine)
-    # Required objects
+    # Get version Required objects
     version_req = get_version_required(con, documento_tecnico, etapa)
-    # Features attributes
-    # version_att = get_version_attributes(con)
+    # Get versionFeatures attributes
+    version_att = get_version_attributes(engine)
+
     
     # file_path = str(current_path.parent.absolute().joinpath(data_folder).joinpath(zip_file))
     # TODO esto debe ser leido de la base de datos
@@ -54,20 +54,21 @@ if __name__ == '__main__':
     #    extract_files(file_path, extract_path)
     set_workspace(ruta_gdb)
 
-    # Get Datasets
+    # Get Feature Datasets
     ds = get_feature_datasets()
-
     # Get Feature Classes
     fc = get_feature_classes()
-
     # Get Feature Classes
     tbl = get_tables()
-    
+    # Get Feature Attributes
+    attributes = get_feature_attributes(version_fc, fc)
+
+
+
     # Validator 1 - Spatial Matching
     spatial_matching(con, id_bd_gdb, expediente)
 
     # Validator 2 - Reference System
-    
     df_reference = reference_system(version, engine, id_bd_gdb, version_ds, ds)
 
     # Validator 3 - Quantity of datasets
@@ -83,10 +84,10 @@ if __name__ == '__main__':
     quantity_required(con, id_bd_gdb, version_req, fc)
 
     # Validator 7 - Attributive
-    # feature_attributes(con, id_bd_gdb, version_fc, fc)
+    df_attributes = feature_attributes(con, id_bd_gdb, version_att, attributes)
     
     # TODO actualizar estado de la gdb
-    final = pd.concat([df_reference, df_datasets, df_features, df_tables])
+    final = pd.concat([df_reference, df_datasets, df_features, df_tables, df_attributes])
     final.to_sql(
         name=valw_gdb_mensaje.table_name,
         con=engine, 
