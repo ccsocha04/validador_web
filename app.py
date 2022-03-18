@@ -5,7 +5,7 @@ from runpy import run_path
 from Validador.validator_web import (cod_id_validator, extract_files, get_feature_classes, get_feature_datasets, get_tables, get_feature_attributes, 
                                     quantity_dataset, quantity_feature_class, 
                                     quantity_tables, reference_system, spatial_matching, 
-                                    quantity_required, feature_attributes)
+                                    quantity_required, feature_attributes, verify_cod_expediente)
 from Validador.version_info import (get_version_datasets, get_version_feature_classes, get_version_tables,
                                     get_version_required, get_version_attributes)
 from utils.utils import valw_gdb_mensaje, set_workspace
@@ -26,7 +26,7 @@ if __name__ == '__main__':
     etapa = 'Exploración'
     version='1'
     id_bd_gdb, ruta_gdb = gdb_para_validar(engine, gdb=path)
-    # TODO UPDATE INICIO_VALIDACION
+
     update_estado(con, id=id_bd_gdb, estado='En proceso')
     borrar_registros_mensajes(con, id=id_bd_gdb)
 
@@ -84,15 +84,23 @@ if __name__ == '__main__':
     quantity_required(con, id_bd_gdb, version_req, fc)
 
     # Validator 7 - Attributive
-    # df_attributes = feature_attributes(con, id_bd_gdb, version_att, attributes)
+    #df_attributes = feature_attributes(con, id_bd_gdb, version_att, attributes)
     
     df_id_validacion = cod_id_validator(engine, documento_tecnico, id_gdb=id_bd_gdb)
+    df_cod_expediente = verify_cod_expediente(
+        engine, 
+        gdb_id=id_bd_gdb, 
+        version_features=version_fc,
+        expediente=expediente,
+    )
     # TODO actualizar estado de la gdb
     final = pd.concat([
         df_reference, df_datasets, 
         df_features, df_tables, 
-        # df_attributes, 
-        df_id_validacion])
+        #df_attributes, 
+        df_id_validacion,
+        df_cod_expediente,
+        ])
     final.to_sql(
         name=valw_gdb_mensaje.table_name,
         con=engine, 
