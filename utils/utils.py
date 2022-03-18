@@ -49,6 +49,7 @@ class ValwDomValidadores(BaseModel):
     attibutes: str = 'ATRIBUTOS'
     identificadores: str = 'IDENTIFICADORES'
     expediente: str = 'CODIGO EXPEDIENTE'
+    campos_obligatorios: str = 'CAMPOS OBLIGATORIOS'
 
 class ValwSRS(BaseModel):
     table_name: str = 'VALW_SRS'

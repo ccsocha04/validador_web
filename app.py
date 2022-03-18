@@ -5,7 +5,7 @@ from runpy import run_path
 from Validador.validator_web import (cod_id_validator, extract_files, get_feature_classes, get_feature_datasets, get_tables, get_feature_attributes, 
                                     quantity_dataset, quantity_feature_class, 
                                     quantity_tables, reference_system, spatial_matching, 
-                                    quantity_required, feature_attributes, verify_cod_expediente)
+                                    quantity_required, feature_attributes, verify_cod_expediente, verify_mandatory_fields)
 from Validador.version_info import (get_version_datasets, get_version_feature_classes, get_version_tables,
                                     get_version_required, get_version_attributes)
 from utils.utils import valw_gdb_mensaje, set_workspace
@@ -61,45 +61,42 @@ if __name__ == '__main__':
     # Get Feature Classes
     tbl = get_tables()
     # Get Feature Attributes
-    attributes = get_feature_attributes(version_fc, fc)
+    # attributes = get_feature_attributes(version_fc, fc)
 
 
 
     # Validator 1 - Spatial Matching
-    spatial_matching(con, id_bd_gdb, expediente)
+    # spatial_matching(con, id_bd_gdb, expediente)
 
     # Validator 2 - Reference System
-    df_reference = reference_system(version, engine, id_bd_gdb, version_ds, ds)
+    # df_reference = reference_system(version, engine, id_bd_gdb, version_ds, ds)
 
     # Validator 3 - Quantity of datasets
-    df_datasets = quantity_dataset(engine, id_bd_gdb, version_ds, ds)
+    # df_datasets = quantity_dataset(engine, id_bd_gdb, version_ds, ds)
 
     # Validator 4 - Quantity of feature classes
-    df_features = quantity_feature_class(engine, id_bd_gdb, version_fc, fc)
+    # df_features = quantity_feature_class(engine, id_bd_gdb, version_fc, fc)
 
     # Validator 5 - Quantity of tables
-    df_tables = quantity_tables(engine, id_bd_gdb, version_tbl, tbl)
+    # df_tables = quantity_tables(engine, id_bd_gdb, version_tbl, tbl)
 
     # Validator 6 - Required
-    quantity_required(con, id_bd_gdb, version_req, fc)
+    # quantity_required(con, id_bd_gdb, version_req, fc)
 
     # Validator 7 - Attributive
-    #df_attributes = feature_attributes(con, id_bd_gdb, version_att, attributes)
+    # df_attributes = feature_attributes(con, id_bd_gdb, version_att, attributes)
     
-    df_id_validacion = cod_id_validator(engine, documento_tecnico, id_gdb=id_bd_gdb)
-    df_cod_expediente = verify_cod_expediente(
-        engine, 
-        gdb_id=id_bd_gdb, 
-        version_features=version_fc,
-        expediente=expediente,
-    )
+    # df_id_validacion = cod_id_validator(engine, documento_tecnico, id_gdb=id_bd_gdb)
+    # df_cod_expediente = verify_cod_expediente(engine, gdb_id=id_bd_gdb, version_features=version_fc, expediente=expediente)
     # TODO actualizar estado de la gdb
+    df_mandatory_fields = verify_mandatory_fields(id_gdb=id_bd_gdb)
     final = pd.concat([
-        df_reference, df_datasets, 
-        df_features, df_tables, 
+        #df_reference, df_datasets, 
+        #df_features, df_tables, 
         #df_attributes, 
-        df_id_validacion,
-        df_cod_expediente,
+        #df_id_validacion,
+        #df_cod_expediente,
+        df_mandatory_fields
         ])
     final.to_sql(
         name=valw_gdb_mensaje.table_name,

@@ -1,3 +1,4 @@
+import re
 import arcpy
 import os
 import sys
@@ -13,7 +14,7 @@ from zipfile import ZipFile
 from sqlalchemy import desc
 from utils.utils import (NULL_VALUE, conversion_format, set_workspace, valw_gdb_mensaje, 
     valw_dom_validadores, valw_srs, valw_version)
-from database.connection import pd_upper_columns, schema
+from database.connection import pd_upper_columns, schema, engine
 
 
 def extract_files(file_path: str, extract_path: str):
@@ -590,6 +591,39 @@ def cod_id_validator(engine, dto_tecnico:str, id_gdb:int)->pd.DataFrame:
                         bool_column=0,
                     )
                 report_df = pd.concat([report_df, bad_row])
+    return report_df.copy()
+
+def verify_mandatory_fields(id_gdb: int) -> pd.DataFrame:
+    # TODO no dejar este query quemado
+    sql = """SELECT NOMBRE, NOMBRE_ATRIBUTO, OBLIGACION 
+        FROM MJEREZ.VALW_OBJETOS_ATRIBUTOS WHERE OBLIGACION = 'Obligatorio'"""
+    df_to_check = pd_upper_columns(sql, engine)
+    validador_id = _id_validador(engine, valw_dom_validadores.campos_obligatorios)
+    # TODO no dejar esto quemado
+    report_df = _report_df()
+    for feature in df_to_check['NOMBRE'].drop_duplicates().to_list():
+        try:
+            campos_obligatorios = df_to_check[(df_to_check['NOMBRE']==feature)]['NOMBRE_ATRIBUTO'].drop_duplicates().to_list()
+            df_feature = pd.DataFrame(FeatureClassToNumPyArray(
+                feature, 
+                campos_obligatorios, 
+                null_value=NULL_VALUE))
+            
+            # verificar que el df_feature esté vació
+            if not len(df_feature) == 0:
+                for campos_obligatorio in campos_obligatorios:
+                    # convierte las filas de la serie en cadena de texto. revisa si tiene `NULL_VALUE` y revisa si alguno es nulo.
+                    if df_feature[campos_obligatorio].astype('str').str.contains(str(NULL_VALUE), regex=False).any():
+                        bad_row = _df_mensajes_row(
+                            gdb_id_column=id_gdb,
+                            validador_id=validador_id,
+                            mensaje_column=f'Error diligenciamiento atributo obligatorio {campos_obligatorio} -> {feature}',
+                            bool_column=0
+                        )
+                        report_df = pd.concat([report_df, bad_row], ignore_index=True)
+        except:
+            print(f'Error al tratar de leer {feature}')
+
     return report_df.copy()
         
 def verify_cod_expediente(
