@@ -2,7 +2,7 @@ import pandas as pd
 from pathlib import Path
 from runpy import run_path
 
-from Validador.validator_web import (extract_files, get_feature_classes, get_feature_datasets, get_tables, get_feature_attributes, 
+from Validador.validator_web import (cod_id_validator, extract_files, get_feature_classes, get_feature_datasets, get_tables, get_feature_attributes, 
                                     quantity_dataset, quantity_feature_class, 
                                     quantity_tables, reference_system, spatial_matching, 
                                     quantity_required, feature_attributes)
@@ -17,8 +17,8 @@ if __name__ == '__main__':
     # cantidad = por_validar(con)
 
     #if cantidad > 0:
-    #path = r'E:\VWMDG\validador_web\Data\IDO-08061_202203071.gdb'
-    path = r'C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data\IDO-08061_202203071.gdb'
+    path = r'E:\VWMDG\validador_web\Data\IDO-08061_20220303.gdb'
+    #path = r'C:\UTGI\SoftwareEstrategico\ANNA\Python\Validador_Web\Data\IDO-08061_202203071.gdb'
     
     expediente = 'IDO-08061'
     documento_tecnico = 'Formato Básico Minero - FBM'
@@ -84,10 +84,15 @@ if __name__ == '__main__':
     quantity_required(con, id_bd_gdb, version_req, fc)
 
     # Validator 7 - Attributive
-    df_attributes = feature_attributes(con, id_bd_gdb, version_att, attributes)
+    # df_attributes = feature_attributes(con, id_bd_gdb, version_att, attributes)
     
+    df_id_validacion = cod_id_validator(engine, documento_tecnico, id_gdb=id_bd_gdb)
     # TODO actualizar estado de la gdb
-    final = pd.concat([df_reference, df_datasets, df_features, df_tables, df_attributes])
+    final = pd.concat([
+        df_reference, df_datasets, 
+        df_features, df_tables, 
+        # df_attributes, 
+        df_id_validacion])
     final.to_sql(
         name=valw_gdb_mensaje.table_name,
         con=engine, 

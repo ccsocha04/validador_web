@@ -5,7 +5,7 @@ from importlib_metadata import version
 import pandas as pd
 import requests
 
-
+from arcpy.da import FeatureClassToNumPyArray
 from importlib.resources import path
 from typing import List, Dict, Tuple
 from zipfile import ZipFile
@@ -524,6 +524,8 @@ def feature_attributes(engine, id, attribute_version, attribute_gdb) -> pd.DataF
     final = pd.concat([df_validate_geometry, df_validate_topology])
     final[valw_gdb_mensaje.gdb_id_column] = id
     final[valw_gdb_mensaje.validador_id] = id_validador
+
+
     return final[[
         valw_gdb_mensaje.gdb_id_column,
         valw_gdb_mensaje.validador_id,
@@ -542,4 +544,58 @@ def feature_attributes(engine, id, attribute_version, attribute_gdb) -> pd.DataF
     #i FIELD LENGTH -> OBJETOS_ATRIBUTOS
     #j DOMAIN -> OBJETOS_ATRIBUTOS
     #k VALIDATE DOMAIN -> OBJETOS_ATRIBUTOS
+
+def cod_id_validator(engine, dto_tecnico:str, id_gdb:int):
+    """
+    Valida que los datos del identificador en cada  uno de los features, sean consecuentes con los de sus documento técnico.
+
+    Args:
+        engine engine: un engine de sqlAlchemy.
+        dto_tecnico: Nombre del documento técnico al cual pertenece la gdb de estudio.
+    """
+    # leer la información de la base de datos
+
+    #TODO no dejar esto quemado
+    sql = """
+    SELECT vdt.NOMBRE_DOCUMENTO, vot.NOMBRE_OBJETO, vdo.ID AS ID_ATT  FROM MJEREZ.VALW_DOCUMENTOS_TECNICOS vdt 
+    INNER JOIN 
+    MJEREZ.VALW_DOCUMENTO_OBJETO vdo ON vdt.ID_DOCUMENTO  = vdo.ID_DOCUMENTO 
+    INNER JOIN 
+    MJEREZ.VALW_OBJETOS_TOTALES vot ON vdo.ID_OBJETOS = vot.ID_OBJETOS_TOTALES
+    """
+    df_to_check = pd_upper_columns(sql, engine)
+    id_validador = _id_validador(engine, valw_dom_validadores.identificadores)
+    # TODO no dejar esto quemado
+    value = -9999999
+    columns = [valw_gdb_mensaje.gdb_id_column, 
+        valw_gdb_mensaje.validador_id, 
+        valw_gdb_mensaje.mensaje_column,
+        valw_gdb_mensaje.bool_column]
+    report_df = pd.DataFrame(columns=columns)
+    for feature in df_to_check['NOMBRE_OBJETO'].drop_duplicates().to_list():
+        codigo = df_to_check[
+            (df_to_check['NOMBRE_OBJETO']==feature) 
+            & 
+            (df_to_check['NOMBRE_DOCUMENTO'] == dto_tecnico)
+            ]['ID_ATT']
+        df_feature = pd.DataFrame(FeatureClassToNumPyArray(
+            feature, 
+            ["ID"], 
+            null_value=value))
+        
+        # en caso de que el df_feature esté vacío
+        if not len(df_feature) == 0:
+            if len(df_feature[(df_feature['ID'] != int(codigo))])>0:
+                bad_data = {}
+                bad_data[valw_gdb_mensaje.gdb_id_column] = id_gdb
+                bad_data[valw_gdb_mensaje.validador_id] = id_validador
+                bad_data[valw_gdb_mensaje.mensaje_column] = f'Error Atributo ID {feature} -> {feature}'
+                bad_df = pd.DataFrame([bad_data])
+                report_df = pd.concat([report_df, bad_df])
+    report_df[valw_gdb_mensaje.bool_column] = 0
+    return report_df
+        
+    def_verify_cod_expediente(engine, gdb_id, )
+
+        
 
