@@ -10,6 +10,7 @@ from typing import List, Dict
 from zipfile import ZipFile
 from pydantic import BaseModel
 
+NULL_VALUE = -9999999
 
 def conversion_format(path: str):
     """
@@ -46,6 +47,9 @@ class ValwDomValidadores(BaseModel):
     features: str = 'FEATURE CLASSES'
     tables: str = 'TABLAS'
     attibutes: str = 'ATRIBUTOS'
+    identificadores: str = 'IDENTIFICADORES'
+    expediente: str = 'CODIGO EXPEDIENTE'
+    campos_obligatorios: str = 'CAMPOS OBLIGATORIOS'
 
 class ValwSRS(BaseModel):
     table_name: str = 'VALW_SRS'

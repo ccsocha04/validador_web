@@ -1,3 +1,4 @@
+import re
 import arcpy
 import os
 import sys
@@ -5,15 +6,15 @@ from importlib_metadata import version
 import pandas as pd
 import requests
 
-
+from arcpy.da import FeatureClassToNumPyArray
 from importlib.resources import path
 from typing import List, Dict, Tuple
 from zipfile import ZipFile
 
 from sqlalchemy import desc
-from utils.utils import (conversion_format, set_workspace, valw_gdb_mensaje, 
+from utils.utils import (NULL_VALUE, conversion_format, set_workspace, valw_gdb_mensaje, 
     valw_dom_validadores, valw_srs, valw_version)
-from database.connection import pd_upper_columns, schema
+from database.connection import pd_upper_columns, schema, engine
 
 
 def extract_files(file_path: str, extract_path: str):
@@ -524,6 +525,8 @@ def feature_attributes(engine, id, attribute_version, attribute_gdb) -> pd.DataF
     final = pd.concat([df_validate_geometry, df_validate_topology])
     final[valw_gdb_mensaje.gdb_id_column] = id
     final[valw_gdb_mensaje.validador_id] = id_validador
+
+
     return final[[
         valw_gdb_mensaje.gdb_id_column,
         valw_gdb_mensaje.validador_id,
@@ -533,7 +536,7 @@ def feature_attributes(engine, id, attribute_version, attribute_gdb) -> pd.DataF
 
     #a GEOMETRIA -> OBJETOS_ATRIBUTOS OK
     #b CHECK GEOMETRY -> GEOPROCESO OK
-    #c COD_ID_ATRIBUTO -> ATRIBUTO
+    #c COD_ID_ATRIBUTO -> ATRIBUTO OK
     #d COD_EXPEDIENTE -> ATRIBUTO
     #e ATRIBUTOS OBLIGATORIOS -> OBJETOS_ATRIBUTOS
     #f FIELD NAME -> OBJETOS_ATRIBUTOS
@@ -542,4 +545,164 @@ def feature_attributes(engine, id, attribute_version, attribute_gdb) -> pd.DataF
     #i FIELD LENGTH -> OBJETOS_ATRIBUTOS
     #j DOMAIN -> OBJETOS_ATRIBUTOS
     #k VALIDATE DOMAIN -> OBJETOS_ATRIBUTOS
+
+def cod_id_validator(engine, dto_tecnico:str, id_gdb:int)->pd.DataFrame:
+    """
+    Valida que los datos del identificador en cada  uno de los features, sean consecuentes con los de sus documento técnico.
+
+    Args:
+        engine engine: un engine de sqlAlchemy.
+        dto_tecnico: Nombre del documento técnico al cual pertenece la gdb de estudio.
+    Returns:
+        pd.DataFrame
+    """
+    # leer la información de la base de datos
+
+    #TODO no dejar esto quemado
+    sql = """
+    SELECT vdt.NOMBRE_DOCUMENTO, vot.NOMBRE_OBJETO, vdo.ID AS ID_ATT  FROM MJEREZ.VALW_DOCUMENTOS_TECNICOS vdt 
+    INNER JOIN 
+    MJEREZ.VALW_DOCUMENTO_OBJETO vdo ON vdt.ID_DOCUMENTO  = vdo.ID_DOCUMENTO 
+    INNER JOIN 
+    MJEREZ.VALW_OBJETOS_TOTALES vot ON vdo.ID_OBJETOS = vot.ID_OBJETOS_TOTALES
+    """
+    df_to_check = pd_upper_columns(sql, engine)
+    id_validador = _id_validador(engine, valw_dom_validadores.identificadores)
+    # TODO no dejar esto quemado
+    report_df = _report_df()
+    for feature in df_to_check['NOMBRE_OBJETO'].drop_duplicates().to_list():
+        codigo = df_to_check[
+            (df_to_check['NOMBRE_OBJETO']==feature) 
+            & 
+            (df_to_check['NOMBRE_DOCUMENTO'] == dto_tecnico)
+            ]['ID_ATT']
+        df_feature = pd.DataFrame(FeatureClassToNumPyArray(
+            feature, 
+            ["ID"], 
+            null_value=NULL_VALUE))
+        
+        # en caso de que el df_feature esté vacío
+        if not len(df_feature) == 0:
+            if len(df_feature[(df_feature['ID'] != int(codigo))])>0:
+                bad_row = _df_mensajes_row(
+                        gdb_id_column=id_gdb,
+                        validador_id=id_validador,
+                        mensaje_column=f'Error Atributo ID {feature} -> {feature}',
+                        bool_column=0,
+                    )
+                report_df = pd.concat([report_df, bad_row])
+    return report_df.copy()
+
+def verify_mandatory_fields(id_gdb: int) -> pd.DataFrame:
+    # TODO no dejar este query quemado
+    sql = """SELECT NOMBRE, NOMBRE_ATRIBUTO, OBLIGACION 
+        FROM MJEREZ.VALW_OBJETOS_ATRIBUTOS WHERE OBLIGACION = 'Obligatorio'"""
+    df_to_check = pd_upper_columns(sql, engine)
+    validador_id = _id_validador(engine, valw_dom_validadores.campos_obligatorios)
+    # TODO no dejar esto quemado
+    report_df = _report_df()
+    for feature in df_to_check['NOMBRE'].drop_duplicates().to_list():
+        try:
+            campos_obligatorios = df_to_check[(df_to_check['NOMBRE']==feature)]['NOMBRE_ATRIBUTO'].drop_duplicates().to_list()
+            df_feature = pd.DataFrame(FeatureClassToNumPyArray(
+                feature, 
+                campos_obligatorios, 
+                null_value=NULL_VALUE))
+            
+            # verificar que el df_feature esté vació
+            if not len(df_feature) == 0:
+                for campos_obligatorio in campos_obligatorios:
+                    # convierte las filas de la serie en cadena de texto. revisa si tiene `NULL_VALUE` y revisa si alguno es nulo.
+                    if df_feature[campos_obligatorio].astype('str').str.contains(str(NULL_VALUE), regex=False).any():
+                        bad_row = _df_mensajes_row(
+                            gdb_id_column=id_gdb,
+                            validador_id=validador_id,
+                            mensaje_column=f'Error diligenciamiento atributo obligatorio {campos_obligatorio} -> {feature}',
+                            bool_column=0
+                        )
+                        report_df = pd.concat([report_df, bad_row], ignore_index=True)
+        except:
+            print(f'Error al tratar de leer {feature}')
+
+    return report_df.copy()
+        
+def verify_cod_expediente(
+        engine, 
+        gdb_id: int, 
+        version_features: pd.DataFrame, 
+        expediente:str):
+    """
+    Retorna un dataframe de mensajes de codigos de expediente.
+
+    Args:
+        engine engine: Engine de sqlalchemy.
+        gdb_id int: Identificador de item de validación en la base de datos.
+        version_features pd.DataFrame: features de la version.
+        expediente str: El expediente a ser validado
+    Returns:
+        pd.DataFrame
+    """
+    validador_id = _id_validador(engine, valw_dom_validadores.expediente)
+    report_df = _report_df()
+    for feature in version_features['NOMBRE_OBJETO'].to_list():
+        try:
+            df_feature = pd.DataFrame(FeatureClassToNumPyArray(
+                feature, 
+                ["COD_EXPEDIENTE"], 
+                null_value=NULL_VALUE))
+            
+            #c chequear que no sea igual a 0
+            if not len(df_feature) == 0:
+
+                # chequear errores
+                if len(df_feature[(df_feature['COD_EXPEDIENTE']!=expediente)]) > 0:
+                    bad_row = _df_mensajes_row(
+                        gdb_id_column=gdb_id,
+                        validador_id=validador_id,
+                        mensaje_column=f'Error Código Expediente No es correcto para MDG -> {feature}',
+                        bool_column=0,
+                    )
+                    report_df = pd.concat([report_df, bad_row])
+        except ValueError:
+            print(f'Omitiendo lectura de COD_EXPEDIENTE en '
+                  f'{feature}, no ha sido posible la lectura')
+    return report_df.copy()
+        
+def _df_mensajes_row(
+        gdb_id_column: int, 
+        validador_id: int, 
+        mensaje_column: str, 
+        bool_column: int) -> pd.DataFrame:
+    """
+    Retorna un dataframe de un solo registro con la información que va a ser
+    persistida.
+
+    Args:
+        gdb_id_column int: Identificador de la gdb en la base de datos.
+        validador_id int: Identificador de item de validación en la base de datos.
+        mensaje_column str: Mensaje a ser guardado.
+        bool_column bool: Muestra si es error o no (0, 1)
+    Returns:
+        pd.DataFrame
+    """
+    data = {
+        valw_gdb_mensaje.gdb_id_column: gdb_id_column,
+        valw_gdb_mensaje.validador_id: validador_id,
+        valw_gdb_mensaje.mensaje_column: mensaje_column,
+        valw_gdb_mensaje.bool_column: bool_column
+    }
+    return pd.DataFrame([data]).copy()
+
+def _report_df()->pd.DataFrame:
+    """
+    Crea un dataframe vacío con las columnas que van a ser persistidas.
+    """
+    columns = [valw_gdb_mensaje.gdb_id_column, 
+        valw_gdb_mensaje.validador_id, 
+        valw_gdb_mensaje.mensaje_column,
+        valw_gdb_mensaje.bool_column]
+    return pd.DataFrame(columns=columns)
+
+
+        
 
