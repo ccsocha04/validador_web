@@ -3,6 +3,7 @@ from typing import Tuple
 
 from pydantic import ValidationError
 from database.connection import pd_upper_columns
+from database.connection import con, engine, schema
 
 def por_validar (connection) -> int:
     """
@@ -23,32 +24,30 @@ def por_validar (connection) -> int:
         return row.rowcount
 
 
-def gdb_para_validar(connection, gdb: str) -> Tuple[str, str]:
+def gdb_para_validar(gdb: str) -> Tuple[int, str, str, int, int]:
     """
-    Devuelve el path de la ubicación de la gdb.
+    Devuelve el id, el path de la ubicación de la gdb, la etapa y el documento técnico.
 
     Args:
-        conecction : conexión a la base de datos.
+        
         gdb str: path de la base de datos.
     Returns:
-        id, path: Tuple[str, str] tupla de la base de datos
+        id, path: Tuple[int, str, int, int] tupla de la base de datos
 
-
-    #TODO si no existe se busca el siguiente en cuyo caso debe haber un estado
-    que diga error, o algo. en la tabla VALW_ESTADO_PROCESO.
-
-    # TODO en caso de que no la entre debe arrojar un mensaje claro.
     """
+    sql = f"""SELECT ID, RUTA, NUMERO_EXPEDIENTE, ID_ETAPA, ID_DOCUMENTO_TECNICO FROM MJEREZ.VALW_GDBS_VALIDAR  gdb_val """\
+              f"""WHERE RUTA = '{gdb}'"""
+            
+    df = pd_upper_columns(sql, con)
+    
     try: 
-        sql = f"""
-            SELECT ID, RUTA FROM MJEREZ.VALW_GDBS_VALIDAR  gdb_val
-            WHERE RUTA = '{gdb}'
-            """
-        df = pd_upper_columns(sql, connection)
         if df.shape[0] > 1:
             raise ValidationError('No pueden existir dos registros iguales de gdb en la base de datos. Revise la unicidad.')
-        return int(df.loc[0, 'ID']), df.loc[0,'RUTA']
+        elif df.shape[0] == 0:
+            raise ValidationError('No existe el registro de la gdb en la base de datos')
+        return int(df.loc[0, 'ID']), df.loc[0,'RUTA'], df.loc[0,'NUMERO_EXPEDIENTE'], int(df.loc[0, 'ID_ETAPA']), int(df.loc[0, 'ID_DOCUMENTO_TECNICO'])
     except Exception:
+        update_estado(con, id=int(df.loc[0, 'ID']), estado='Error')
         raise TypeError('No se encuentra el path que está intentando validar en la base de datos.')
 
 def update_estado(connection, id: int, estado:str) -> None:
@@ -69,11 +68,11 @@ def get_id_estado(connection, estado:str) -> int:
     with connection.cursor() as cur:
         return cur.execute(sql, estado=estado).fetchone()[0]
 
-def borrar_registros_mensajes(connection, id) -> None:
+def borrar_registros_mensajes(id) -> None:
     """
     En caso de que la gdb ya haya sido valida borra los mensajes en la base de datos.
     """
     sql = """DELETE FROM MJEREZ.VALW_GDB_MENSAJE WHERE GDB_ID = :id_bd"""
-    with connection.cursor() as cur:
+    with con.cursor() as cur:
         cur.execute(sql, id_bd=id)
     

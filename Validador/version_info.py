@@ -60,7 +60,7 @@ def get_version_required(connection, document, stage) -> List[str]:
     """
     required_fc = []
     with connection.cursor() as cur:
-        for row in cur.execute("""SELECT voo.NOMBRE_CAPA FROM VALW_OBJ_OBLIGATORIOS voo WHERE voo.DOCUMENTO_TECNICO = :document AND voo.ETAPA = :stage""", document=document, stage=stage):
+        for row in cur.execute("""SELECT voo.NOMBRE_CAPA FROM VALW_OBJ_OBLIGATORIOS voo WHERE voo.ID_DOCUMENTO = :document AND voo.ID_ETAPA = :stage""", document=document, stage=stage):
             required_fc.append(row[0])
     
     arcpy.AddMessage(f"1.4 Version_Required_Feature_Class: {len(required_fc)}")

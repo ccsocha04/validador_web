@@ -127,7 +127,7 @@ def get_feature_attributes(vfc_df: pd.DataFrame, fc_df: pd.DataFrame) -> pd.Data
     fc_list = set(fc_df['FEATURES'].tolist())
     fc_to_check = vfc_list.intersection(fc_list)
     fc_names = ['NOMBRE', 'ALIAS', 'TIPO_GEOMETRIA', 'TIPO_FEATURE','NOMBRE_ATRIBUTO', 'ALIAS_ATRIBUTO', 'TIPO_ATRIBUTO', 'TAMANO_ATRIBUTO', 'DOMINIO', 'OBLIGACION']
-    df = pd.DataFrame(columns=[fc_names[0], fc_names[1], fc_names[2], fc_names[3], fc_names[4], fc_names[5], fc_names[6], fc_names[7], fc_names[8], fc_names[9]])
+    df = pd.DataFrame(columns=fc_names)
     
     for fc in fc_to_check:
         descripcion_fc = arcpy.Describe(fc)
@@ -546,13 +546,14 @@ def feature_attributes(engine, id, attribute_version, attribute_gdb) -> pd.DataF
     #j DOMAIN -> OBJETOS_ATRIBUTOS
     #k VALIDATE DOMAIN -> OBJETOS_ATRIBUTOS
 
-def cod_id_validator(engine, dto_tecnico:str, id_gdb:int)->pd.DataFrame:
+def cod_id_validator(dto_tecnico:int, id_gdb:int, features_gdb:pd.DataFrame)->pd.DataFrame:
     """
     Valida que los datos del identificador en cada  uno de los features, sean consecuentes con los de sus documento técnico.
 
     Args:
-        engine engine: un engine de sqlAlchemy.
-        dto_tecnico: Nombre del documento técnico al cual pertenece la gdb de estudio.
+        dto_tecnico: ID del documento técnico al cual pertenece la gdb de estudio.
+        id_gdb: ID de la gdb de estudio.
+        features_gdb: DataFrame con los features de la gdb de estudio.
     Returns:
         pd.DataFrame
     """
@@ -560,28 +561,35 @@ def cod_id_validator(engine, dto_tecnico:str, id_gdb:int)->pd.DataFrame:
 
     #TODO no dejar esto quemado
     sql = """
-    SELECT vdt.NOMBRE_DOCUMENTO, vot.NOMBRE_OBJETO, vdo.ID AS ID_ATT  FROM MJEREZ.VALW_DOCUMENTOS_TECNICOS vdt 
-    INNER JOIN 
-    MJEREZ.VALW_DOCUMENTO_OBJETO vdo ON vdt.ID_DOCUMENTO  = vdo.ID_DOCUMENTO 
-    INNER JOIN 
-    MJEREZ.VALW_OBJETOS_TOTALES vot ON vdo.ID_OBJETOS = vot.ID_OBJETOS_TOTALES
+    SELECT
+	vdt.ID_DOCUMENTO,
+	vdt.NOMBRE_DOCUMENTO,
+	vot.NOMBRE_OBJETO,
+	vdo.ID AS ID_ATT
+    FROM
+	    MJEREZ.VALW_DOCUMENTOS_TECNICOS vdt
+    INNER JOIN  MJEREZ.VALW_DOCUMENTO_OBJETO vdo ON
+	            vdt.ID_DOCUMENTO = vdo.ID_DOCUMENTO
+    INNER JOIN  MJEREZ.VALW_OBJETOS_TOTALES vot ON
+	            vdo.ID_OBJETOS = vot.ID_OBJETOS_TOTALES
     """
     df_to_check = pd_upper_columns(sql, engine)
     id_validador = _id_validador(engine, valw_dom_validadores.identificadores)
     # TODO no dejar esto quemado
     report_df = _report_df()
-    for feature in df_to_check['NOMBRE_OBJETO'].drop_duplicates().to_list():
+    features_to_check = [x for x in features_gdb['FEATURES'].unique() if x in df_to_check['NOMBRE_OBJETO'].unique()]
+    for feature in features_to_check:
         codigo = df_to_check[
             (df_to_check['NOMBRE_OBJETO']==feature) 
             & 
-            (df_to_check['NOMBRE_DOCUMENTO'] == dto_tecnico)
+            (df_to_check['ID_DOCUMENTO'] == dto_tecnico)
             ]['ID_ATT']
         df_feature = pd.DataFrame(FeatureClassToNumPyArray(
             feature, 
             ["ID"], 
             null_value=NULL_VALUE))
         
-        # en caso de que el df_feature esté vacío
+        # en caso de que el df_feature no esté vacío
         if not len(df_feature) == 0:
             if len(df_feature[(df_feature['ID'] != int(codigo))])>0:
                 bad_row = _df_mensajes_row(
@@ -593,7 +601,16 @@ def cod_id_validator(engine, dto_tecnico:str, id_gdb:int)->pd.DataFrame:
                 report_df = pd.concat([report_df, bad_row])
     return report_df.copy()
 
-def verify_mandatory_fields(id_gdb: int) -> pd.DataFrame:
+def verify_mandatory_fields(id_gdb: int, features_gdb:pd.DataFrame) -> pd.DataFrame:
+    """
+    Valida que los datos del identificador en cada  uno de los features, sean consecuentes con los de sus documento técnico.
+
+    Args:
+        id_gdb: ID de la gdb de estudio.
+        features_gdb: DataFrame con los features de la gdb de estudio.
+    Returns:
+        pd.DataFrame
+    """
     # TODO no dejar este query quemado
     sql = """SELECT NOMBRE, NOMBRE_ATRIBUTO, OBLIGACION 
         FROM MJEREZ.VALW_OBJETOS_ATRIBUTOS WHERE OBLIGACION = 'Obligatorio'"""
@@ -601,17 +618,19 @@ def verify_mandatory_fields(id_gdb: int) -> pd.DataFrame:
     validador_id = _id_validador(engine, valw_dom_validadores.campos_obligatorios)
     # TODO no dejar esto quemado
     report_df = _report_df()
-    for feature in df_to_check['NOMBRE'].drop_duplicates().to_list():
+    features_to_check = [x for x in features_gdb['NOMBRE'].unique() if x in df_to_check['NOMBRE'].unique()]
+    for feature in features_to_check:
         try:
-            campos_obligatorios = df_to_check[(df_to_check['NOMBRE']==feature)]['NOMBRE_ATRIBUTO'].drop_duplicates().to_list()
+            campos_obligatorios_meta = df_to_check[(df_to_check['NOMBRE']==feature)]['NOMBRE_ATRIBUTO'].unique()
+            campos_fc_gdb = [x for x in features_gdb['NOMBRE_ATRIBUTO'].unique() if x in campos_obligatorios_meta]
             df_feature = pd.DataFrame(FeatureClassToNumPyArray(
                 feature, 
-                campos_obligatorios, 
+                campos_fc_gdb, 
                 null_value=NULL_VALUE))
             
             # verificar que el df_feature esté vació
             if not len(df_feature) == 0:
-                for campos_obligatorio in campos_obligatorios:
+                for campos_obligatorio in campos_fc_gdb:
                     # convierte las filas de la serie en cadena de texto. revisa si tiene `NULL_VALUE` y revisa si alguno es nulo.
                     if df_feature[campos_obligatorio].astype('str').str.contains(str(NULL_VALUE), regex=False).any():
                         bad_row = _df_mensajes_row(
@@ -621,8 +640,8 @@ def verify_mandatory_fields(id_gdb: int) -> pd.DataFrame:
                             bool_column=0
                         )
                         report_df = pd.concat([report_df, bad_row], ignore_index=True)
-        except:
-            print(f'Error al tratar de leer {feature}')
+        except Exception as e :
+            print(f'Error al tratar de leer {feature} - {str(e)}')
 
     return report_df.copy()
         
@@ -630,6 +649,7 @@ def verify_cod_expediente(
         engine, 
         gdb_id: int, 
         version_features: pd.DataFrame, 
+        features_gdb: pd.DataFrame, 
         expediente:str):
     """
     Retorna un dataframe de mensajes de codigos de expediente.
@@ -638,13 +658,15 @@ def verify_cod_expediente(
         engine engine: Engine de sqlalchemy.
         gdb_id int: Identificador de item de validación en la base de datos.
         version_features pd.DataFrame: features de la version.
+        features_gdb: DataFrame con los features de la gdb de estudio.
         expediente str: El expediente a ser validado
     Returns:
         pd.DataFrame
     """
     validador_id = _id_validador(engine, valw_dom_validadores.expediente)
     report_df = _report_df()
-    for feature in version_features['NOMBRE_OBJETO'].to_list():
+    features_to_check = [x for x in features_gdb['FEATURES'].unique() if x in version_features['NOMBRE_OBJETO'].unique()]
+    for feature in features_to_check:
         try:
             df_feature = pd.DataFrame(FeatureClassToNumPyArray(
                 feature, 
