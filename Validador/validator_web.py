@@ -122,6 +122,13 @@ def get_tables():
 def get_feature_attributes(vfc_df: pd.DataFrame, fc_df: pd.DataFrame) -> pd.DataFrame:
     """
     Get all features attributes
+
+    Args:
+        vfc_df(pd.DataFrame): Features de la versión descargados de la base de datos.
+        fc_df(pd.DataFrame): Feature classes de la gdb.
+    Returns:   
+        pd.DataFrame: Contiene por cada uno de los features la información de los campos
+        Todo lo relacionado con nombre, alias, tipo de geometria, tipo_feature
     """
     vfc_list = set(vfc_df['NOMBRE_OBJETO'].tolist())
     fc_list = set(fc_df['FEATURES'].tolist())
@@ -622,7 +629,7 @@ def verify_mandatory_fields(id_gdb: int, features_gdb:pd.DataFrame) -> pd.DataFr
     for feature in features_to_check:
         try:
             campos_obligatorios_meta = df_to_check[(df_to_check['NOMBRE']==feature)]['NOMBRE_ATRIBUTO'].unique()
-            campos_fc_gdb = [x for x in features_gdb['NOMBRE_ATRIBUTO'].unique() if x in campos_obligatorios_meta]
+            campos_fc_gdb = [x for x in features_gdb[features_gdb['NOMBRE']==feature]['NOMBRE_ATRIBUTO'].unique() if x in campos_obligatorios_meta]
             df_feature = pd.DataFrame(FeatureClassToNumPyArray(
                 feature, 
                 campos_fc_gdb, 
@@ -641,7 +648,7 @@ def verify_mandatory_fields(id_gdb: int, features_gdb:pd.DataFrame) -> pd.DataFr
                         )
                         report_df = pd.concat([report_df, bad_row], ignore_index=True)
         except Exception as e :
-            print(f'Error al tratar de leer {feature} - {str(e)}')
+            print(f'xError al tratar de leer {feature} - {str(e)}')
 
     return report_df.copy()
         

@@ -25,7 +25,6 @@ if __name__ == '__main__':
             
         # path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validate_Web_Repository\Extract\IDO-08061_202203071.gdb"
         path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validate_Web_Repository\Files\IDO-08061_202203071.gdb.zip"
-        documento_tecnico = 'Formato Básico Minero - FBM'
         version='1'
 
         extract_path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validate_Web_Repository\Extract"
@@ -102,5 +101,7 @@ if __name__ == '__main__':
         arcpy.AddError(str(e))
         print(str(e))
     finally:
+        arcpy.AddMessage("Cerrando conexiones")
         con.close()
         engine.dispose()
+        arcpy.AddMessage("Finalizado")
