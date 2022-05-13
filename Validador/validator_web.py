@@ -64,7 +64,7 @@ def spatial_matching(connection, id, exp) -> None:
     sql = """INSERT INTO MJEREZ.VALW_GDB_MENSAJE(GDB_ID, MENSAJE_VAL, VALIDADOR_ID, ESTA_BIEN) VALUES (:id_db, :mensaje, :id_validador, :bool_column)"""
     
     url_service_anm = f"https://geo.anm.gov.co/webgis/services/ANM/ServiciosANM/MapServer/WFSServer?service=WFS&version=2.0.0&request=GetFeature&typeName=Titulo_Vigente&PropertyName=CODIGO_EXPEDIENTE,FECHA_DE_INSCRIPCION,ESTADO,MODALIDAD,ETAPA,NOMBRE_DE_TITULAR,Shape&Filter=<ogc:Filter><ogc:PropertyIsEqualTo><ogc:PropertyName>CODIGO_EXPEDIENTE</ogc:PropertyName><ogc:Literal>{exp}</ogc:Literal></ogc:PropertyIsEqualTo></ogc:Filter>&outputformat=ESRIGEOJSON"
-    geojson_service_anm = requests.get(url_service_anm).json()
+    geojson_service_anm = requests.get(url_service_anm, verify=False).json()
     
     mining_title = arcpy.AsShape(geojson_service_anm, True)
     delimit_proyect_pg = arcpy.MakeFeatureLayer_management(os.path.join(arcpy.env.workspace, "TOPOGRAFIA_LOCAL", "DELIMIT_PROYEC_PG"))
