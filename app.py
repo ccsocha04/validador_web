@@ -25,9 +25,8 @@ if __name__ == '__main__':
             
         # path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validate_Web_Repository\Extract\IDO-08061_202203071.gdb"
         path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validate_Web_Repository\Files\IDO-08061_202203071.gdb.zip"
-        version='1'
-
         extract_path = r"C:\UTGI\SoftwareEstrategico\ANNA\Python\Validate_Web_Repository\Extract"
+        version='1'
 
         arcpy.AddMessage('1. Database connection')
 

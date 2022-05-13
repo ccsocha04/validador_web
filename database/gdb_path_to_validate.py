@@ -1,3 +1,4 @@
+from datetime import datetime
 import pandas as pd
 from typing import Tuple
 
@@ -50,16 +51,21 @@ def gdb_para_validar(gdb: str) -> Tuple[int, str, str, int, int]:
         update_estado(con, id=int(df.loc[0, 'ID']), estado='Error')
         raise TypeError('No se encuentra el path que está intentando validar en la base de datos.')
 
-def update_estado(connection, id: int, estado:str) -> None:
+def update_estado(connection, id:int, estado:str) -> None:
     """
     Actualiza el estado de la base de datos
     """
-    sql = """
-    UPDATE MJEREZ.VALW_GDBS_VALIDAR SET ESTADO_ID = :estado WHERE ID = :id_bd
-    """
+    if estado == 'En proceso':
+        sql = """
+        UPDATE MJEREZ.VALW_GDBS_VALIDAR SET ESTADO_ID = :estado, INICIO_VALIDACION = :fecha WHERE ID = :id_bd
+        """
+    else:
+        sql = """
+        UPDATE MJEREZ.VALW_GDBS_VALIDAR SET ESTADO_ID = :estado, FECHA_TERMINACION = :fecha WHERE ID = :id_bd
+        """
     id_estado = get_id_estado(connection, estado)
     with connection.cursor() as cur:
-        cur.execute(sql, estado=id_estado, id_bd=id)
+        cur.execute(sql, estado=id_estado, id_bd=id, fecha=datetime.now())
 
 def get_id_estado(connection, estado:str) -> int:
     sql = """
