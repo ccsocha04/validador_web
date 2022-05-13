@@ -502,8 +502,6 @@ def feature_attributes(engine, id, attribute_version, attribute_gdb) -> pd.DataF
         df_validate_geometry[valw_gdb_mensaje.mensaje_column] = df_validate_geometry['FEATURE'].\
             apply(lambda x: f'Error tipo de geometría -> {x}')
         df_validate_geometry[valw_gdb_mensaje.bool_column] = 0
-    
-    # print(df_validate_geometry)
 
     df_version_topology = attribute_version[['NOMBRE']].copy()
     df_version_topology = (df_version_topology.sort_values(by='NOMBRE')).drop_duplicates()
@@ -520,38 +518,19 @@ def feature_attributes(engine, id, attribute_version, attribute_gdb) -> pd.DataF
             apply(lambda x: f'Error topólogico -> {x}')
         df_validate_topology[valw_gdb_mensaje.bool_column] = 0
 
-    # print(df_validate_topology)
-
     df_version_attributes = attribute_version[['NOMBRE','NOMBRE_ATRIBUTO']].sort_values(by='NOMBRE')
     df_gdb_attributes = attribute_version[['NOMBRE','NOMBRE_ATRIBUTO']].sort_values(by='NOMBRE')
     df_attributes = df_version_attributes.merge(df_gdb_attributes, how='left', left_on='NOMBRE', right_on='NOMBRE')
 
-    # print(df_version_attributes.head(15))
-    # print(df_gdb_attributes.head(15))
-
     final = pd.concat([df_validate_geometry, df_validate_topology])
     final[valw_gdb_mensaje.gdb_id_column] = id
     final[valw_gdb_mensaje.validador_id] = id_validador
-
 
     return final[[
         valw_gdb_mensaje.gdb_id_column,
         valw_gdb_mensaje.validador_id,
         valw_gdb_mensaje.mensaje_column,
         valw_gdb_mensaje.bool_column]].copy()
-    
-
-    #a GEOMETRIA -> OBJETOS_ATRIBUTOS OK
-    #b CHECK GEOMETRY -> GEOPROCESO OK
-    #c COD_ID_ATRIBUTO -> ATRIBUTO OK
-    #d COD_EXPEDIENTE -> ATRIBUTO
-    #e ATRIBUTOS OBLIGATORIOS -> OBJETOS_ATRIBUTOS
-    #f FIELD NAME -> OBJETOS_ATRIBUTOS
-    #g FIELD NAME ALIAS -> OBJETOS_ATRIBUTOS
-    #h FIELD TYPE -> OBJETOS_ATRIBUTOS
-    #i FIELD LENGTH -> OBJETOS_ATRIBUTOS
-    #j DOMAIN -> OBJETOS_ATRIBUTOS
-    #k VALIDATE DOMAIN -> OBJETOS_ATRIBUTOS
 
 def cod_id_validator(dto_tecnico:int, id_gdb:int, features_gdb:pd.DataFrame)->pd.DataFrame:
     """
